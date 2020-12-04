@@ -47,9 +47,137 @@ def add_links(node, source, target, value):
         value.append(1)
 
 
+class RenderNode:
+    node_point_defaults = {
+            'selected' : False
+    }
+    node_point_keys = [
+            'label', 
+            'id', 
+            'parent_id',
+            'parent_label',
+            'depth',
+            'node',
+            'selected',
+            'render_order'
+    ]
+
+    def __init__(self, node, parent):
+        self._node = node
+        self._parent = parent
+
+        self._schildren = []
+        #self._schild_ids = set()
+
+    @property
+    def id(self):
+        return self._node.id
+
+    @property
+    def name(self):
+        return self._node.name
+    
+    def __eq__(self, o):
+        return self.id == o.id
+    
+    
+    def add_child(self, node):
+        rn = RenderNode(node, self)
+        self._schildren.append(rn)
+        self._schildren.sort(key=lambda x: x.name)
+        #self._schild_ids.add(node.id)
+
+    def remove_child(self, node):
+        #self._schild_ids.remove(node.id)
+        if node in self._schildren:
+            self._schildren.remove(node)
+
+    
+    def toggle_node(self, id):
+        # root node
+        if self.id == id:
+            self._schildren = []
+            return True
+
+        # remove node if already selected
+        for c in self._schildren:
+            if c.id == id:
+                self.remove_child(c)
+                return True
+
+        # add node if node is not selected and child
+        for c in self._node.children.values():
+            if c.id == id:
+                self.add_child(c)
+                return True
+
+        # continue search existing selected nodes
+        for c in self._schildren:
+            if c.add_node(id):
+                return True
+
+
+        # not in this subtree, continue search
+        return False
+            
+                
+    
+    def make_node_point(self, **kwargs):
+        t = tuple(kwargs.get(k, self.node_point_defaults.get(k)) for k in self.node_point_keys)
+
+        if any(x is None for x in t):
+            missing = [self.node_point_keys[i] for i in range(len(t)) if t[i] is None]
+            raise RuntimeError(f'missing keys from call to make_node_point : {missing}')
+        return t
+
+
+    # render tree in dfs
+    
+    def render(self):
+        if self._parent is not None:
+            raise RuntimeError('render called on none root node')
+
+        points = {}
+        render_order = [0]
+        self._render(points, 0, render_order)
+
+        df = pd.DataFrame(points.values(), columns=self.node_point_keys)
+
+        return df
+
+
+    def _render(self, points, depth, render_order):
+        points[self.id] = self.make_node_point(
+                    label=self.name,
+                    id=self.id,
+                    depth=depth,
+                    parent_id=self._parent.id if self._parent else np.nan,
+                    parent_label= self._parent.name if self._parent else '',
+                    node=self._node,
+                    selected=True if self._parent else False,
+                    render_order=tuple(render_order[:depth])
+            )
+        for c in self._node.children.values():
+            points[c.id] = (self.make_node_point(
+                    label=c.name,
+                    id=c.id,
+                    depth=depth+1,
+                    parent_id=self.id,
+                    parent_label=self.name,
+                    node=c,
+                    render_order=tuple(render_order)
+            ))
+
+        render_order = render_order + [0]
+        for c in self._schildren:
+            c._render(points, depth+1, render_order)
+            render_order[-1] += 1
+        
 
 
 
+
+    
 class Tree:
 
     def __init__(self, tree):
@@ -57,6 +185,14 @@ class Tree:
         self._nodes = self._get_nodes()
         self.labels = self._get_labels(self._nodes)
         self._pos_to_node_id = [0]
+        self._link_res = 30
+
+        self._cos_y = np.cos(np.linspace(0, np.pi, self._link_res, endpoint=True))
+        
+
+        # add root node
+        self._render_tree = RenderNode(self._tree, None)
+        self._node_df = self._render_tree.render()
     
     def _get_nodes(self):
         nodes = {}
@@ -72,26 +208,53 @@ class Tree:
 
     def generate_layout(self):
         return {
-            'height' : 2000
+            'height' : 2000,
+            'showlegend' : False
         }
 
     def link_points(self, p1, p2):
+        y = (self._cos_y  * (abs(p1[1] - p2[1]) / 2)) + ((p1[1] + p2[1]) / 2)
+        if p2[1] > p1[1]:
+            y = np.flip(y)
+
+        x = np.linspace(p1[0], p2[0], len(y))
+
         return go.Scatter(
-                    x = [p1[0], p2[0]],
-                    y = [p1[1], p2[1]],
-                    mode='lines'
+                    x = x,
+                    y = y,
+                    mode='lines',
+                    name=None
                 )
+#        return go.Scatter(
+#                    x = [p1[0], p2[0]],
+#                    y = [p1[1], p2[1]],
+#                    mode='lines'
+#                )
+#
 
+    
+    def make_node_point(self, **kwargs):
+        t = tuple(kwargs.get(k, self._node_point_defaults.get(k)) for k in self._node_point_keys)
 
-
+        if any(x is None for x in t):
+            missing = [self._node_point_keys[i] for i in range(len(t)) if t[i] is None]
+            raise RuntimeError(f'missing keys from call to make_node_point : {missing}')
+        return t
                     
         
     
     def generate_nodes(self, node_pos):
         node = self._nodes[self._pos_to_node_id[node_pos]]
         # add the root node
-
-        nodes = [(0, 0, 'root', 0, np.nan, self._tree)]
+        nodes = [self.make_node_point(
+                        x=0,
+                        y=0, 
+                        label='root',
+                        id=0,
+                        parent_id=np.nan,
+                        node=self._tree
+                    )
+                ]
         ypos = 0
         xpos = len(node.path) + 1
 
@@ -102,11 +265,25 @@ class Tree:
             if top:
                 children.remove(top)
                 # shift to the right slightly 
-                nodes.append((xpos + .2, ypos, top.name, top.id, node.id, top))
+                nodes.append(self.make_node_point(
+                        x=xpos + .2,
+                        y=ypos, 
+                        label=top.name,
+                        id=top.id,
+                        parent_id=node.id,
+                        node=top
+                ))
                 ypos -= 3 # add larger gap between selected and the rest
 
             for c in children:
-                nodes.append((xpos, ypos, c.name, c.id, node.id, c))
+                nodes.append(self.make_node_point(
+                        x=xpos,
+                        y=ypos, 
+                        label=c.name,
+                        id=c.id,
+                        parent_id=node.id,
+                        node=c
+                ))
                 ypos -= 1
             
 
@@ -115,18 +292,14 @@ class Tree:
             xpos -= 1
             ypos = 0
         
-        return pd.DataFrame(nodes, columns=['x', 'y', 'label', 'id', 'parent_id', 'node'])
+        return pd.DataFrame(nodes, columns=self._node_point_keys)
 
+    def get_clicked_node(self, node_pos):
+        return self._node_df.iloc[node_pos]['node']
 
+    def add_nodes(self, fig, node_df):
 
-    def add_nodes(self, fig, node_pos):
-        node = self._nodes[self._pos_to_node_id[node_pos]]
-        
-        xpos = len(node.path) + 1
-
-        fig.update_xaxes(range=(-.25, xpos + .6))
-
-        node_df = self.generate_nodes(node_pos)
+        fig.update_xaxes(range=(-.25, node_df['x'].max() + .6))
 
         fig.add_trace(
             go.Scatter(
@@ -134,11 +307,9 @@ class Tree:
                 y = node_df['y'],
                 text = node_df['label'],
                 mode = 'markers+text',
-                textposition='middle right'
+                textposition='top right'
             )
         )
-        # update mapping for future lookup
-        self._pos_to_node_id = node_df['id'].values
 
         return node_df
 
@@ -154,12 +325,21 @@ class Tree:
             pid = row['parent_id']
             if np.isnan(pid):
                 continue
-
             r1 = node_df.loc[pid]
             line = self.link_points((r1.x, r1.y), (row.x, row.y))
             fig.add_trace(line)
 
+    
+    def _add_node_pos(self, node_df):
+        node_df['x'] = node_df['depth']
+        node_df['x'].loc[node_df['selected']] += .2
 
+        node_df = node_df.groupby('depth')\
+                            .apply(lambda x : x.sort_values(['render_order', 'label'])\
+                                                .assign(y=np.arange(0, -len(x), -1))
+                                )\
+                        .reset_index(drop=True)
+        return node_df
 
 
     def create_figure(self, node_pos=0):
@@ -167,10 +347,16 @@ class Tree:
         fig = go.Figure(
                 layout=self.generate_layout()
             )
-        
-        node_df = self.add_nodes(fig, node_pos)
 
-        self.add_links(fig, node_df)
+        node = self.get_clicked_node(node_pos)
+        self._render_tree.toggle_node(node.id)
+        self._node_df = self._render_tree.render()
+        
+        self._node_df = self._add_node_pos(self._node_df)
+            
+        self.add_nodes(fig, self._node_df)
+
+        self.add_links(fig, self._node_df)
 
         return fig
 
