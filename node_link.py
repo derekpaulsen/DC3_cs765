@@ -196,10 +196,10 @@ class Tree:
         self._node_df = self._render_tree.render()
 
         self._line_colors = [
-                px.colors.qualitative.Pastel[0],
-                #px.colors.qualitative.Pastel[2],
-                px.colors.qualitative.Pastel[4],
-                px.colors.qualitative.Pastel[9],
+                px.colors.qualitative.Safe[0],
+                px.colors.qualitative.Safe[1],
+                px.colors.qualitative.Safe[2],
+                #px.colors.qualitative.Safe[4],
         ]
 
         self._also_line_dash = '2px'
@@ -240,25 +240,53 @@ class Tree:
         else:
             raise RuntimeError(f'unknown line type {type}')
 
+
+    def link_parent_child(self, p, c):
+            
+            color = self._line_colors[c.render_order[-1] % len(self._line_colors)]
+            lines = []
+            if c['selected']:
+                # extend the curve linearly 
+                # to avoid collisions
+                line = self.link_points((p.x, p.y), (c.x - self._x_selected_offset, c.prev_y))
+                line.line.color = color
+                lines.append(line)
+                line = self.link_points((c.x - self._x_selected_offset, c.prev_y), (c.x, c.y))
+                line.line.color = color
+                lines.append(line)
+            else:
+                line = self.link_points((p.x, p.y), (c.x, c.y))
+                line.line.color = color
+                lines.append(line)
+
+            return lines
     
+    def link_also(self, node, node_df):
+        lines = []
+        for node_id, cnt in node.node.also.items():
+            if node_id in node_df.index:
+                other = node_df.loc[node_id]
+                # don't like nodes with the same parent
+                if other.parent_id == node.parent_id and not other.selected:
+                    continue
+
+                line = self.link_points((other.x, other.y), (node.x, node.y), 'linear')
+                line.line.color = self._also_line_color
+                line.line.dash = self._also_line_dash
+                line.line.width = self._also_line_width
+
+                lines.append(line)
+
+        return lines
+
+
     def add_links(self, fig, node_df):
 
         for idx, row in node_df.iterrows():
             pid = row['parent_id']
             
-            for node_id, cnt in row.node.also.items():
-                if node_id in node_df.index:
-                    other = node_df.loc[node_id]
-                    # don't like nodes with the same parent
-                    if other.parent_id == row.parent_id and not other.selected:
-                        continue
-
-                    line = self.link_points((other.x, other.y), (row.x, row.y), 'linear')
-                    line.line.color = self._also_line_color
-                    line.line.dash = self._also_line_dash
-                    line.line.width = self._also_line_width
-
-                    fig.add_trace(line)
+            for l in self.link_also(row, node_df):
+                fig.add_trace(l)
 
             if np.isnan(pid):
                 continue
@@ -266,20 +294,8 @@ class Tree:
             r1 = node_df.loc[pid]
             
             color = self._line_colors[row.render_order[-1] % len(self._line_colors)]
-            if row['selected']:
-                # extend the curve linearly 
-                # to avoid collisions
-                line = self.link_points((r1.x, r1.y), (row.x - self._x_selected_offset, row.y))
-                line.line.color = color
-                fig.add_trace(line)
-                line = self.link_points((row.x - self._x_selected_offset, row.y), (row.x, row.y))
-                line.line.color = color
-                fig.add_trace(line)
-            else:
-                line = self.link_points((r1.x, r1.y), (row.x, row.y))
-                line.line.color = color
-                fig.add_trace(line)
-    
+            for l in self.link_parent_child(r1, row):
+                fig.add_trace(l)
 
     
     def _make_hover_text(self, row):
@@ -295,18 +311,36 @@ number of children : {len(n.children)}
         df['y'] = np.arange(0, -len(df), -1)
         if len(df) > 1:
             df['y'] -= np.diff(df.render_order.apply(lambda x : x[-1]), prepend=0).cumsum() - 1
-        return df
+            df = self._adjust_selected_ypos(df)
 
+        return df
+    
+    def _adjust_selected_ypos(self, df):
+        min_selected_y_dist = -2
+        df['prev_y'] = df['y']
+        y = df.loc[df.selected]['y'].sort_values(ascending=False)
+
+        if len(y) > 1:
+            print('y', y)
+            diffs = np.minimum(min_selected_y_dist, np.diff(y.values, prepend=0))
+            new_y = diffs.cumsum()
+            df.loc[y.index, 'y'] = new_y
+
+        return df
+        
     def _add_node_pos(self, node_df):
         node_df['x'] = node_df['depth']
+        # offset the selected nodes
         node_df.loc[node_df['selected'], 'x'] += self._x_selected_offset
+
         node_df = node_df.reset_index()\
                          .groupby('depth')\
                             .apply(self._assign_node_y_pos)\
                         .reset_index(drop=True)\
                         .set_index('id')
 
-        node_df['product_count'] = node_df['node'].apply(lambda x: x.productCount)
+
+        node_df['sub_product_count'] = node_df['node'].apply(lambda x: x.subtreeProductCount)
         node_df.at[0, 'y'] = node_df['y'].loc[node_df.depth == 1].median()
         return node_df
 
@@ -326,14 +360,15 @@ number of children : {len(n.children)}
         #scatter.marker.symbol = 'circle-open'
         #scatter.marker.sizemode = 'area'
         scatter.marker.size = 18
-        scatter.marker.colorscale = 'Reds'
-        scatter.marker.colorscale = 'Reds'
+        # color options
+        scatter.marker.colorscale = 'Greens'
         scatter.marker.cmin = 0.0
         scatter.marker.cmax = 1.0
-
-        colors = node_df['product_count'].values
-        colors[colors == 0] = 1
-        colors = np.log(colors * 2)
+        
+        colors = node_df['sub_product_count'].values.astype(np.float64)
+        # limit colors 
+        colors = np.clip(colors, 1, 100000)
+        colors = np.log(colors)
         colors /= colors.max()
         scatter.marker.color = colors
 
