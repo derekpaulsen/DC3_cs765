@@ -249,6 +249,10 @@ class Tree:
             for node_id, cnt in row.node.also.items():
                 if node_id in node_df.index:
                     other = node_df.loc[node_id]
+                    # don't like nodes with the same parent
+                    if other.parent_id == row.parent_id and not other.selected:
+                        continue
+
                     line = self.link_points((other.x, other.y), (row.x, row.y), 'linear')
                     line.line.color = self._also_line_color
                     line.line.dash = self._also_line_dash
