@@ -197,7 +197,7 @@ class Tree:
 
         self._line_colors = [
                 px.colors.qualitative.Pastel[0],
-                px.colors.qualitative.Pastel[2],
+                #px.colors.qualitative.Pastel[2],
                 px.colors.qualitative.Pastel[4],
                 px.colors.qualitative.Pastel[9],
         ]
@@ -216,25 +216,30 @@ class Tree:
 
         }
 
-    def link_points(self, p1, p2):
-        y = (self._cos_y  * (abs(p1[1] - p2[1]) / 2)) + ((p1[1] + p2[1]) / 2)
-        if p2[1] > p1[1]:
-            y = np.flip(y)
+    def link_points(self, p1, p2, type='cos'):
+        if type == 'cos':
+            y = (self._cos_y  * (abs(p1[1] - p2[1]) / 2)) + ((p1[1] + p2[1]) / 2)
+            if p2[1] > p1[1]:
+                y = np.flip(y)
 
-        x = np.linspace(p1[0], p2[0], len(y))
+            x = np.linspace(p1[0], p2[0], len(y))
 
-        line = go.Scatter(
-                    x = x,
-                    y = y,
-                    mode='lines'
-                )
-        return line
-#        return go.Scatter(
-#                    x = [p1[0], p2[0]],
-#                    y = [p1[1], p2[1]],
-#                    mode='lines'
-#                )
-#
+            line = go.Scatter(
+                        x = x,
+                        y = y,
+                        mode='lines',
+                        hoverinfo='none'
+                    )
+            return line
+        elif type == 'linear':
+            return go.Scatter(
+                        x = [p1[0], p2[0]],
+                        y = [p1[1], p2[1]],
+                        mode='lines'
+                    )
+        else:
+            raise RuntimeError(f'unknown line type {type}')
+
     
     def add_links(self, fig, node_df):
 
@@ -244,7 +249,7 @@ class Tree:
             for node_id, cnt in row.node.also.items():
                 if node_id in node_df.index:
                     other = node_df.loc[node_id]
-                    line = self.link_points((other.x, other.y), (row.x, row.y))
+                    line = self.link_points((other.x, other.y), (row.x, row.y), 'linear')
                     line.line.color = self._also_line_color
                     line.line.dash = self._also_line_dash
                     line.line.width = self._also_line_width
