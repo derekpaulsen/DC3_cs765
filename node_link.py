@@ -1,4 +1,5 @@
 import plotly.graph_objects as go
+import plotly.express as px
 import pickle
 from pprint import pformat
 import json
@@ -113,7 +114,7 @@ class RenderNode:
 
         # continue search existing selected nodes
         for c in self._schildren:
-            if c.add_node(id):
+            if c.toggle_node(id):
                 return True
 
 
@@ -143,7 +144,7 @@ class RenderNode:
 
         df = pd.DataFrame(points.values(), columns=self.node_point_keys)
 
-        return df
+        return df.set_index('id')
 
 
     def _render(self, points, depth, render_order):
@@ -154,7 +155,7 @@ class RenderNode:
                     parent_id=self._parent.id if self._parent else np.nan,
                     parent_label= self._parent.name if self._parent else '',
                     node=self._node,
-                    selected=True if self._parent else False,
+                    selected=True,
                     render_order=tuple(render_order[:depth])
             )
         for c in self._node.children.values():
@@ -171,7 +172,9 @@ class RenderNode:
         render_order = render_order + [0]
         for c in self._schildren:
             c._render(points, depth+1, render_order)
-            render_order[-1] += 1
+
+            if len(c._node.children) > 0:
+                render_order[-1] += 1
         
 
 
@@ -182,34 +185,35 @@ class Tree:
 
     def __init__(self, tree):
         self._tree = tree
-        self._nodes = self._get_nodes()
-        self.labels = self._get_labels(self._nodes)
         self._pos_to_node_id = [0]
-        self._link_res = 30
 
+        self._link_res = 30
         self._cos_y = np.cos(np.linspace(0, np.pi, self._link_res, endpoint=True))
-        
+        self._x_selected_offset = .5
 
         # add root node
         self._render_tree = RenderNode(self._tree, None)
         self._node_df = self._render_tree.render()
+
+        self._line_colors = [
+                px.colors.qualitative.Pastel[0],
+                px.colors.qualitative.Pastel[2],
+                px.colors.qualitative.Pastel[4],
+                px.colors.qualitative.Pastel[9],
+        ]
+
+        self._also_line_dash = '2px'
+        self._also_line_color = 'grey'
+        self._also_line_width = .5
     
-    def _get_nodes(self):
-        nodes = {}
-        get_nodes(self._tree, nodes)
-        return nodes
+    def generate_layout(self, node_df):
+        max_nodes = node_df.groupby('depth').count().max().iat[0]
 
-    def _get_labels(self, nodes):
-        label = [nodes.get(i) for i in range(0, max(nodes.keys()) + 1)]
-        label = [(n.name if n else None) for n in label] 
-
-        return np.array(label)
-
-
-    def generate_layout(self):
         return {
-            'height' : 2000,
-            'showlegend' : False
+            'height' : max_nodes * 27,
+            'showlegend' : False,
+            'plot_bgcolor' : 'white'
+
         }
 
     def link_points(self, p1, p2):
@@ -219,144 +223,148 @@ class Tree:
 
         x = np.linspace(p1[0], p2[0], len(y))
 
-        return go.Scatter(
+        line = go.Scatter(
                     x = x,
                     y = y,
-                    mode='lines',
-                    name=None
+                    mode='lines'
                 )
+        return line
 #        return go.Scatter(
 #                    x = [p1[0], p2[0]],
 #                    y = [p1[1], p2[1]],
 #                    mode='lines'
 #                )
 #
-
     
-    def make_node_point(self, **kwargs):
-        t = tuple(kwargs.get(k, self._node_point_defaults.get(k)) for k in self._node_point_keys)
+    def add_links(self, fig, node_df):
 
-        if any(x is None for x in t):
-            missing = [self._node_point_keys[i] for i in range(len(t)) if t[i] is None]
-            raise RuntimeError(f'missing keys from call to make_node_point : {missing}')
-        return t
-                    
-        
-    
-    def generate_nodes(self, node_pos):
-        node = self._nodes[self._pos_to_node_id[node_pos]]
-        # add the root node
-        nodes = [self.make_node_point(
-                        x=0,
-                        y=0, 
-                        label='root',
-                        id=0,
-                        parent_id=np.nan,
-                        node=self._tree
-                    )
-                ]
-        ypos = 0
-        xpos = len(node.path) + 1
-
-        top = None
-        while node:
-            children = sorted(node.children.values(), key=lambda x : x.name)
-            # put selected node at the top
-            if top:
-                children.remove(top)
-                # shift to the right slightly 
-                nodes.append(self.make_node_point(
-                        x=xpos + .2,
-                        y=ypos, 
-                        label=top.name,
-                        id=top.id,
-                        parent_id=node.id,
-                        node=top
-                ))
-                ypos -= 3 # add larger gap between selected and the rest
-
-            for c in children:
-                nodes.append(self.make_node_point(
-                        x=xpos,
-                        y=ypos, 
-                        label=c.name,
-                        id=c.id,
-                        parent_id=node.id,
-                        node=c
-                ))
-                ypos -= 1
+        for idx, row in node_df.iterrows():
+            pid = row['parent_id']
             
+            for node_id, cnt in row.node.also.items():
+                if node_id in node_df.index:
+                    other = node_df.loc[node_id]
+                    line = self.link_points((other.x, other.y), (row.x, row.y))
+                    line.line.color = self._also_line_color
+                    line.line.dash = self._also_line_dash
+                    line.line.width = self._also_line_width
 
-            top = node
-            node = node.parent
-            xpos -= 1
-            ypos = 0
-        
-        return pd.DataFrame(nodes, columns=self._node_point_keys)
+                    fig.add_trace(line)
 
-    def get_clicked_node(self, node_pos):
-        return self._node_df.iloc[node_pos]['node']
+            if np.isnan(pid):
+                continue
+
+            r1 = node_df.loc[pid]
+            
+            color = self._line_colors[row.render_order[-1] % len(self._line_colors)]
+            if row['selected']:
+                # extend the curve linearly 
+                # to avoid collisions
+                line = self.link_points((r1.x, r1.y), (row.x - self._x_selected_offset, row.y))
+                line.line.color = color
+                fig.add_trace(line)
+                line = self.link_points((row.x - self._x_selected_offset, row.y), (row.x, row.y))
+                line.line.color = color
+                fig.add_trace(line)
+            else:
+                line = self.link_points((r1.x, r1.y), (row.x, row.y))
+                line.line.color = color
+                fig.add_trace(line)
+    
+
+    
+    def _make_hover_text(self, row):
+        n = row['node']
+        return f'''
+{n.name}<br>
+subtree product count : {n.subtreeProductCount}<br>
+number of children : {len(n.children)}
+'''
+
+    def _assign_node_y_pos(self, df):
+        df = df.sort_values(['render_order', 'label'])
+        df['y'] = np.arange(0, -len(df), -1)
+        if len(df) > 1:
+            df['y'] -= np.diff(df.render_order.apply(lambda x : x[-1]), prepend=0).cumsum() - 1
+        return df
+
+    def _add_node_pos(self, node_df):
+        node_df['x'] = node_df['depth']
+        node_df.loc[node_df['selected'], 'x'] += self._x_selected_offset
+        node_df = node_df.reset_index()\
+                         .groupby('depth')\
+                            .apply(self._assign_node_y_pos)\
+                        .reset_index(drop=True)\
+                        .set_index('id')
+
+        node_df['product_count'] = node_df['node'].apply(lambda x: x.productCount)
+        node_df.at[0, 'y'] = node_df['y'].loc[node_df.depth == 1].median()
+        return node_df
 
     def add_nodes(self, fig, node_df):
 
-        fig.update_xaxes(range=(-.25, node_df['x'].max() + .6))
+        fig.update_xaxes(range=(.25, node_df['x'].max() + .6))
 
-        fig.add_trace(
-            go.Scatter(
+        
+        scatter = go.Scatter(
                 x = node_df['x'],
                 y = node_df['y'],
                 text = node_df['label'],
                 mode = 'markers+text',
-                textposition='top right'
+                textposition=node_df['selected'].apply(lambda x : 'top center' if x else 'middle right')
             )
-        )
+
+        #scatter.marker.symbol = 'circle-open'
+        #scatter.marker.sizemode = 'area'
+        scatter.marker.size = 18
+        scatter.marker.colorscale = 'Reds'
+        scatter.marker.colorscale = 'Reds'
+        scatter.marker.cmin = 0.0
+        scatter.marker.cmax = 1.0
+
+        colors = node_df['product_count'].values
+        colors[colors == 0] = 1
+        colors = np.log(colors * 2)
+        colors /= colors.max()
+        scatter.marker.color = colors
+
+        scatter.hovertext = node_df.apply(self._make_hover_text, axis=1)
+        scatter.hoverinfo = 'text'
+        #scatter.hoverlabel = node_df['product_count'].apply(str)
+
+
+        fig.add_trace(scatter)
 
         return node_df
 
+    def get_clicked_node(self, click_data):
+        
+        row = self._node_df.iloc[click_data['pointNumber']]
+        if click_data['x'] == row.x and click_data['y'] == row.y:
+            return row.node
+        else:
+            return None
 
-    def generate_links(self, node_id):
-        pass
+    def create_figure(self, click_data=None):
+        if click_data is None:
+            node = self._tree
+        else:
+            node = self.get_clicked_node(click_data)
 
-    def add_links(self, fig, node_df):
+        if node is None:
+            return self._fig
 
-        node_df = node_df.set_index('id')
-
-        for idx, row in node_df.iterrows():
-            pid = row['parent_id']
-            if np.isnan(pid):
-                continue
-            r1 = node_df.loc[pid]
-            line = self.link_points((r1.x, r1.y), (row.x, row.y))
-            fig.add_trace(line)
-
-    
-    def _add_node_pos(self, node_df):
-        node_df['x'] = node_df['depth']
-        node_df['x'].loc[node_df['selected']] += .2
-
-        node_df = node_df.groupby('depth')\
-                            .apply(lambda x : x.sort_values(['render_order', 'label'])\
-                                                .assign(y=np.arange(0, -len(x), -1))
-                                )\
-                        .reset_index(drop=True)
-        return node_df
-
-
-    def create_figure(self, node_pos=0):
-
-        fig = go.Figure(
-                layout=self.generate_layout()
-            )
-
-        node = self.get_clicked_node(node_pos)
+        fig = go.Figure()
         self._render_tree.toggle_node(node.id)
         self._node_df = self._render_tree.render()
         
         self._node_df = self._add_node_pos(self._node_df)
             
+        self.add_links(fig, self._node_df)
         self.add_nodes(fig, self._node_df)
 
-        self.add_links(fig, self._node_df)
+        fig.update_layout(self.generate_layout(self._node_df))
+        self._fig = fig
 
         return fig
 
@@ -402,10 +410,10 @@ def create_app(tree):
     def display_click_data(data):
         print(data)
         if data is None:
-            return tree.create_figure()
-
-        node_id = data['points'][0]['pointNumber']
-        return tree.create_figure(node_id)
+            return tree.create_figure(None)
+        
+        data = data['points'][0]
+        return tree.create_figure(data)
     return app
 
 
