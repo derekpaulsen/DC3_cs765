@@ -208,9 +208,10 @@ class Tree:
         self._also_line_color = 'grey'
         self._also_line_width = .5
 
-        self._highlight_line_width = 15
-        self._highlight_also_line_width = 7
-        self._highlight_also_line_color = 'darkgrey'
+        self._highlight_line_width = 7
+        self._highlight_line_color = px.colors.qualitative.Vivid[8]
+        self._highlight_also_line_width = 5
+        self._highlight_also_line_color = px.colors.qualitative.Dark2[7]
 
         self._fig = None
         self._last_hover_number = None
@@ -324,16 +325,17 @@ number of children : {len(n.children)}
         return df
     
     def _adjust_selected_ypos(self, df):
-        min_selected_y_dist = -2
-        df['prev_y'] = df['y']
-        y = df.loc[df.selected]['y'].sort_values(ascending=False)
+        min_selected_y_dist = 2
+        df['prev_y'] = df['y'].copy()
+        y = df.loc[df.selected]['prev_y'].sort_values(ascending=False)
 
         if len(y) > 1:
-            print('y', y)
-            diffs = np.minimum(min_selected_y_dist, np.diff(y.values))
-            new_y = diffs.cumsum()
+            for i in range(1, len(y)):
+                if np.abs(y.iat[i] - y.iat[i-1]) < min_selected_y_dist:
+                    y.iat[i] = y.iat[i-1] - min_selected_y_dist
+
             # don't adjust the first node
-            df.loc[y.index[1:], 'y'] = new_y
+            df.loc[y.index, 'y'] = y
 
         return df
         
@@ -396,7 +398,8 @@ number of children : {len(n.children)}
         while n.parent_id in node_df.index:
             p = node_df.loc[n.parent_id]
             for l in self.link_parent_child(p, n):
-                l.line.width = self._highlight_also_line_width
+                l.line.width = self._highlight_line_width
+                l.line.color = self._highlight_line_color
                 fig.add_trace(l)
             n = p
 
