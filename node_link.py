@@ -32,6 +32,9 @@ styles = {
     }
 }
 
+alsoCounts = pd.read_csv('all-nodes.csv')\
+                .set_index('id')['alsoCount']
+
 
 
 def dist(p1,p2):
@@ -372,15 +375,16 @@ class Tree:
         n = row['node']
         return f'''
 {n.name}<br>
-subtree product count : {n.subtreeProductCount}<br>
-number of children : {len(n.children)}
+product count : {n.productCount}<br>
+number of sub-categories : {len(n.children)}
 '''
 
     def _assign_node_y_pos(self, df):
         df = df.sort_values(['render_order', 'label'])
         df['y'] = np.arange(0, -len(df), -1)
+        # add gap between the subtrees 
         if len(df) > 1:
-            df['y'] -= np.diff(df.render_order.apply(lambda x : x[-1]), prepend=0).cumsum() 
+            df['y'] -= np.diff(df.render_order.apply(lambda x : x[-1]), prepend=0).cumsum() * 2
 
         df = self._adjust_selected_ypos(df)
         return df
@@ -487,33 +491,47 @@ number of children : {len(n.children)}
             return None
 
     def create_table(self, highlight_nodes, node_df):
+
+        NAME = 'Name'
+        SCAT_PROD_CNT = 'Subcategory Product Count'
+        N_SCAT = 'Number of Subcategories'
+        PROD_CNT = 'Product Count'
+        D = 'Depth'
+        N_CX_LISTED_CAT = 'Number of Cross Listed Categories'
+        # cannot get this info
+       # N_CX_LISTED = 'Number of Cross Listed Products'
+       # PC_CX_LISTED = 'Percent of Products Cross Listed'
         df = pd.DataFrame(
                 columns= ['Node 1' , 'Node 2'],
-                index = ['Name',
-                        'Subcategory Product Count',
-                        'Number of Subcategories',
-                        'Product Count',
-                        'Depth'
+                index = [NAME,
+                        SCAT_PROD_CNT,
+                        N_SCAT,
+                        PROD_CNT,
+                        D,
+                        N_CX_LISTED_CAT,
                     ]
             )
 
-        print(df)
 
         for i, n_id in enumerate(highlight_nodes):
             if n_id is None or n_id not in node_df.index:
                 continue
 
             n = node_df.loc[n_id]
-            # don't highlight if the user deselected the node
-            if not n.selected:
-                continue
             
-            col = f'Node {i+1}'
-            df.loc['Name', col] = n.node.name
-            df.loc['Subcategory Product Count', col] = n.node.subtreeProductCount
-            df.loc['Number of Subcategories', col] = len(n.node.children)
-            df.loc['Product Count', col] = n.node.productCount
-            df.loc['Depth', col] = n.depth
+            col = df.columns[i]
+            df.loc[NAME, col] = n.node.name
+            df.loc[SCAT_PROD_CNT, col] = n.node.subtreeProductCount
+            df.loc[N_SCAT, col] = len(n.node.children)
+            df.loc[PROD_CNT, col] = n.node.productCount
+            df.loc[D, col] = n.depth
+            if n.node.productCount > 0:
+                ac = alsoCounts.at[n.node.id] 
+                pre = '' if ac < 200 else '> '
+                df.loc[N_CX_LISTED_CAT, col] = ac
+            else:
+                df.loc[N_CX_LISTED_CAT, col] = '0'
+
 
 
 
@@ -531,13 +549,14 @@ number of children : {len(n.children)}
         if click_data is None or self._click_mode != click_mode:
             self._click_mode = click_mode
             if self._fig:
-                
+                print('first return')
                 return self._fig, self._table
             node = self._tree
         else:
             node = self.get_clicked_node(click_data)
 
         if node is None:
+            print('node not found')
             return self._fig, self._table
         
 
@@ -563,7 +582,7 @@ number of children : {len(n.children)}
         fig.update_layout(self.generate_layout(self._node_df))
         self._fig = fig
 
-
+        print(self._highlighted_nodes)
         table = self.create_table(self._highlighted_nodes, self._node_df)
         self._table = table
 
