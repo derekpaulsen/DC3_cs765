@@ -11,6 +11,8 @@ import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output
 
+from copy import deepcopy
+
 import logging
 import logging.config
 import sys
@@ -205,6 +207,13 @@ class Tree:
         self._also_line_dash = '2px'
         self._also_line_color = 'grey'
         self._also_line_width = .5
+
+        self._highlight_line_width = 15
+        self._highlight_also_line_width = 7
+        self._highlight_also_line_color = 'darkgrey'
+
+        self._fig = None
+        self._last_hover_number = None
     
     def generate_layout(self, node_df):
         max_nodes = node_df.groupby('depth').count().max().iat[0]
@@ -291,10 +300,9 @@ class Tree:
             if np.isnan(pid):
                 continue
 
-            r1 = node_df.loc[pid]
+            parent = node_df.loc[pid]
             
-            color = self._line_colors[row.render_order[-1] % len(self._line_colors)]
-            for l in self.link_parent_child(r1, row):
+            for l in self.link_parent_child(parent, row):
                 fig.add_trace(l)
 
     
@@ -310,9 +318,9 @@ number of children : {len(n.children)}
         df = df.sort_values(['render_order', 'label'])
         df['y'] = np.arange(0, -len(df), -1)
         if len(df) > 1:
-            df['y'] -= np.diff(df.render_order.apply(lambda x : x[-1]), prepend=0).cumsum() - 1
+            df['y'] -= np.diff(df.render_order.apply(lambda x : x[-1]), prepend=0).cumsum() 
             df = self._adjust_selected_ypos(df)
-
+        print(df)
         return df
     
     def _adjust_selected_ypos(self, df):
@@ -322,9 +330,10 @@ number of children : {len(n.children)}
 
         if len(y) > 1:
             print('y', y)
-            diffs = np.minimum(min_selected_y_dist, np.diff(y.values, prepend=0))
+            diffs = np.minimum(min_selected_y_dist, np.diff(y.values))
             new_y = diffs.cumsum()
-            df.loc[y.index, 'y'] = new_y
+            # don't adjust the first node
+            df.loc[y.index[1:], 'y'] = new_y
 
         return df
         
@@ -381,6 +390,23 @@ number of children : {len(n.children)}
 
         return node_df
 
+    def _highlight_path(self, fig, node, node_df):
+        n = node_df.loc[node.id]
+
+        while n.parent_id in node_df.index:
+            p = node_df.loc[n.parent_id]
+            for l in self.link_parent_child(p, n):
+                l.line.width = self._highlight_also_line_width
+                fig.add_trace(l)
+            n = p
+
+
+        for l in self.link_also(n, node_df):
+            l.line.width = self._highlight_also_line_width
+            l.line.color = self._highlight_also_line_color
+            fig.add_trace(l)
+        
+
     def get_clicked_node(self, click_data):
         
         row = self._node_df.iloc[click_data['pointNumber']]
@@ -405,12 +431,15 @@ number of children : {len(n.children)}
         self._node_df = self._add_node_pos(self._node_df)
             
         self.add_links(fig, self._node_df)
+        self._highlight_path(fig, node, self._node_df)
         self.add_nodes(fig, self._node_df)
 
         fig.update_layout(self.generate_layout(self._node_df))
         self._fig = fig
 
-        return fig
+        return self._fig
+
+
 
 
 
@@ -451,13 +480,39 @@ def create_app(tree):
     @app.callback(
             Output('tree', 'figure'),
             Input('tree', 'clickData'))
-    def display_click_data(data):
-        print(data)
-        if data is None:
+    def display_click_data(click_data):
+        print(f'click_data : {pformat(click_data)}')
+        if click_data is None:
             return tree.create_figure(None)
-        
-        data = data['points'][0]
-        return tree.create_figure(data)
+        else:
+            data = click_data['points'][0]
+            return tree.create_figure(data)
+
+    #@app.callback(
+    #        Output('tree', 'figure'),
+    #        [Input('tree', 'clickData'),
+    #        Input('tree', 'hoverData')])
+    #def display_click_data(click_data, hover_data):
+    #    print(f'click_data : {pformat(click_data)}')
+    #    print(f'hover_data : {pformat(hover_data)}')
+    #    if click_data is None and hover_data is None:
+    #        return tree.create_figure(None)
+
+    #    elif click_data is not None:
+    #        data = click_data['points'][0]
+    #        return tree.create_figure(data)
+
+    #    elif hover_data is not None:
+    #        data = hover_data['points'][0]
+    #        if 'pointNumber' in data:
+    #            return tree.highlight_fig(data)
+    #        else:
+    #            return tree._fig
+
+
+
+
+
     return app
 
 
