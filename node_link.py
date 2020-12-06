@@ -208,13 +208,18 @@ class Tree:
         self._also_line_color = 'grey'
         self._also_line_width = .5
 
-        self._highlight_line_width = 7
+        self._highlight_line_width = 5
         self._highlight_line_color = px.colors.qualitative.Vivid[8]
-        self._highlight_also_line_width = 5
-        self._highlight_also_line_color = px.colors.qualitative.Dark2[7]
+
+        self._highlight_also_line_width = 3
+        self._highlight_also_line_color = px.colors.qualitative.Dark2[2]
 
         self._fig = None
         self._last_hover_number = None
+
+        self._highlighted_nodes = [
+                None, None
+        ]
     
     def generate_layout(self, node_df):
         max_nodes = node_df.groupby('depth').count().max().iat[0]
@@ -281,9 +286,15 @@ class Tree:
                     continue
 
                 line = self.link_points((other.x, other.y), (node.x, node.y), 'linear')
-                line.line.color = self._also_line_color
+
                 line.line.dash = self._also_line_dash
-                line.line.width = self._also_line_width
+                if other.name in self._highlighted_nodes:
+                    line.line.color = self._highlight_also_line_color
+                    line.line.width = self._highlight_also_line_width
+                else:
+                    line.line.color = self._also_line_color
+                    line.line.width = self._also_line_width
+
 
                 lines.append(line)
 
@@ -293,6 +304,7 @@ class Tree:
     def add_links(self, fig, node_df):
 
         for idx, row in node_df.iterrows():
+
             pid = row['parent_id']
             
             for l in self.link_also(row, node_df):
@@ -320,8 +332,8 @@ number of children : {len(n.children)}
         df['y'] = np.arange(0, -len(df), -1)
         if len(df) > 1:
             df['y'] -= np.diff(df.render_order.apply(lambda x : x[-1]), prepend=0).cumsum() 
-            df = self._adjust_selected_ypos(df)
-        print(df)
+
+        df = self._adjust_selected_ypos(df)
         return df
     
     def _adjust_selected_ypos(self, df):
@@ -363,7 +375,7 @@ number of children : {len(n.children)}
         scatter = go.Scatter(
                 x = node_df['x'],
                 y = node_df['y'],
-                text = node_df['label'],
+                text = node_df['label'].apply(lambda x : f'<b>{x}</b>'),
                 mode = 'markers+text',
                 textposition=node_df['selected'].apply(lambda x : 'top center' if x else 'middle right')
             )
@@ -426,6 +438,8 @@ number of children : {len(n.children)}
 
         if node is None:
             return self._fig
+
+        self._highlighted_nodes[0] = node.id
 
         fig = go.Figure()
         self._render_tree.toggle_node(node.id)
