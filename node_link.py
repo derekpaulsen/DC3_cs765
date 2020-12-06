@@ -217,9 +217,9 @@ class Tree:
         self._highlight_also_line_width = 3
         self._highlight_also_line_color = px.colors.qualitative.Dark2[2]
 
-        self._fig = go.Figure()
-        self._table = go.Figure()
-        self._last_hover_number = None
+        self._fig = None
+        self._table = None
+        self._mode = None
 
         self._highlighted_nodes = [
                 None, None
@@ -462,9 +462,6 @@ number of children : {len(n.children)}
                 continue
 
             n = node_df.loc[nn]
-            # don't highlight if the user deselected the node
-            if not n.selected:
-                continue
 
             while n.parent_id in node_df.index:
                 p = node_df.loc[n.parent_id]
@@ -489,13 +486,15 @@ number of children : {len(n.children)}
         else:
             return None
 
-
-
-
     def create_table(self, highlight_nodes, node_df):
         df = pd.DataFrame(
                 columns= ['Node 1' , 'Node 2'],
-                index = ['Name']
+                index = ['Name',
+                        'Subcategory Product Count',
+                        'Number of Subcategories',
+                        'Product Count',
+                        'Depth'
+                    ]
             )
 
         print(df)
@@ -511,6 +510,12 @@ number of children : {len(n.children)}
             
             col = f'Node {i+1}'
             df.loc['Name', col] = n.node.name
+            df.loc['Subcategory Product Count', col] = n.node.subtreeProductCount
+            df.loc['Number of Subcategories', col] = len(n.node.children)
+            df.loc['Product Count', col] = n.node.productCount
+            df.loc['Depth', col] = n.depth
+
+
 
         return go.Figure(data=[
                     go.Table(
@@ -523,7 +528,11 @@ number of children : {len(n.children)}
 
 
     def create_figure(self, click_data, click_mode):
-        if click_data is None:
+        if click_data is None or self._click_mode != click_mode:
+            self._click_mode = click_mode
+            if self._fig:
+                
+                return self._fig, self._table
             node = self._tree
         else:
             node = self.get_clicked_node(click_data)
@@ -531,12 +540,19 @@ number of children : {len(n.children)}
         if node is None:
             return self._fig, self._table
         
+
         if click_mode >= 0:
+            # highlight node
             self._highlighted_nodes[click_mode] = node.id
+
+        else:
+            # select or deselect node, expand or collapse
+            self._render_tree.toggle_node(node.id)
 
         # DONT TOUCH THESE LINES
         fig = go.Figure()
-        self._render_tree.toggle_node(node.id)
+
+
         self._node_df = self._render_tree.render()
         self._node_df = self._add_node_pos(self._node_df)
             
