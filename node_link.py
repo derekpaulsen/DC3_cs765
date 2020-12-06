@@ -1,4 +1,5 @@
 import plotly.graph_objects as go
+import dash_table
 import plotly.express as px
 import pickle
 from pprint import pformat
@@ -16,7 +17,6 @@ from copy import deepcopy
 import logging
 import logging.config
 import sys
-from tree import Node
 
 LOGGING_CONF = './conf/logging.conf'
 
@@ -33,6 +33,9 @@ styles = {
 }
 
 
+
+def dist(p1,p2):
+    return np.sqrt((p1[0] - p2[0])**2 +  (p1[1] - p2[1])**2)
 depth = 0
 
 # extract all the node labels
@@ -214,7 +217,8 @@ class Tree:
         self._highlight_also_line_width = 3
         self._highlight_also_line_color = px.colors.qualitative.Dark2[2]
 
-        self._fig = None
+        self._fig = go.Figure()
+        self._table = go.Figure()
         self._last_hover_number = None
 
         self._highlighted_nodes = [
@@ -223,9 +227,11 @@ class Tree:
     
     def generate_layout(self, node_df):
         max_nodes = node_df.groupby('depth').count().max().iat[0]
+        max_depth = node_df['x'].max()
 
         return {
             'height' : max_nodes * 27,
+            'width' : max_depth * 700,
             'showlegend' : False,
             'plot_bgcolor' : 'white'
 
@@ -250,8 +256,49 @@ class Tree:
             return go.Scatter(
                         x = [p1[0], p2[0]],
                         y = [p1[1], p2[1]],
-                        mode='lines'
+                        mode='lines',
+                        hoverinfo='none'
                     )
+
+        elif type == 'arc':
+
+            if p1[1] > p2[1]:
+                p1, p2, = p2, p1
+                
+            arc = np.pi / 60
+            # 120 degree arc
+            p4 = (p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2
+            print('p4 ', p4)
+            print('dist ', dist(p2, p1))
+            r = dist(p4, p1) / np.cos(np.pi / 2  - (arc / 2))
+            print('r ',r)
+            theta = np.arccos((p1[0] - p2[0]) / dist(p1, p2))
+            print('theta ', theta)
+            theta_prime = theta - (np.pi / 2 - (arc / 2))
+            print('theta prime', theta_prime)
+            p3 = (np.cos(theta_prime) * r + p1[0]), (np.sin(theta_prime) * r + p1[1])
+            print('p3 ',p3)
+
+            start = np.arccos((p2[0] - p3[0]) / r)
+            #start = 2 * np.pi / 3
+            print('start ' , start)
+            thetas = np.linspace(start, start + arc, num=self._link_res, endpoint=True)
+            print(np.cos(thetas))
+            x = np.cos(thetas) * r + p3[0]
+            y = np.sin(thetas) * r + p3[1]
+            print('x',x)
+            print('y',y)
+
+            line = go.Scatter(
+                        x = x,
+                        y = y,
+                        mode='lines',
+                        hoverinfo='none'
+                    )
+
+            return line
+
+
         else:
             raise RuntimeError(f'unknown line type {type}')
 
@@ -281,11 +328,13 @@ class Tree:
         for node_id, cnt in node.node.also.items():
             if node_id in node_df.index:
                 other = node_df.loc[node_id]
-                # don't like nodes with the same parent
+                # don't like nodes with the same parent that are not selected
                 if other.parent_id == node.parent_id and not other.selected:
                     continue
-
-                line = self.link_points((other.x, other.y), (node.x, node.y), 'linear')
+                if other.x == node.x:
+                    line = self.link_points((other.x, other.y), (node.x, node.y), 'arc')
+                else:
+                    line = self.link_points((other.x, other.y), (node.x, node.y), 'linear')
 
                 line.line.dash = self._also_line_dash
                 if other.name in self._highlighted_nodes:
@@ -349,6 +398,8 @@ number of children : {len(n.children)}
             # don't adjust the first node
             df.loc[y.index, 'y'] = y
 
+        # adjust down a little more do avoid label collisions
+        df.loc[df.selected, 'y'] -= .5
         return df
         
     def _add_node_pos(self, node_df):
@@ -368,8 +419,8 @@ number of children : {len(n.children)}
         return node_df
 
     def add_nodes(self, fig, node_df):
-
-        fig.update_xaxes(range=(.25, node_df['x'].max() + .6))
+        print(node_df)
+        fig.update_xaxes(range=(self._x_selected_offset-.05, node_df['x'].max() + .6))
 
         
         scatter = go.Scatter(
@@ -377,7 +428,7 @@ number of children : {len(n.children)}
                 y = node_df['y'],
                 text = node_df['label'].apply(lambda x : f'<b>{x}</b>'),
                 mode = 'markers+text',
-                textposition=node_df['selected'].apply(lambda x : 'top center' if x else 'middle right')
+                textposition = node_df['selected'].apply(lambda x : 'top center' if x else 'middle right')
             )
 
         #scatter.marker.symbol = 'circle-open'
@@ -404,22 +455,30 @@ number of children : {len(n.children)}
 
         return node_df
 
-    def _highlight_path(self, fig, node, node_df):
-        n = node_df.loc[node.id]
+    def _highlight_paths(self, fig, node_ids, node_df):
+        for nn in node_ids:
+            # check for nulls or hidden nodes
+            if nn is None or nn not in node_df.index:
+                continue
 
-        while n.parent_id in node_df.index:
-            p = node_df.loc[n.parent_id]
-            for l in self.link_parent_child(p, n):
-                l.line.width = self._highlight_line_width
-                l.line.color = self._highlight_line_color
+            n = node_df.loc[nn]
+            # don't highlight if the user deselected the node
+            if not n.selected:
+                continue
+
+            while n.parent_id in node_df.index:
+                p = node_df.loc[n.parent_id]
+                for l in self.link_parent_child(p, n):
+                    l.line.width = self._highlight_line_width
+                    l.line.color = self._highlight_line_color
+                    fig.add_trace(l)
+                n = p
+
+
+            for l in self.link_also(n, node_df):
+                l.line.width = self._highlight_also_line_width
+                l.line.color = self._highlight_also_line_color
                 fig.add_trace(l)
-            n = p
-
-
-        for l in self.link_also(n, node_df):
-            l.line.width = self._highlight_also_line_width
-            l.line.color = self._highlight_also_line_color
-            fig.add_trace(l)
         
 
     def get_clicked_node(self, click_data):
@@ -430,31 +489,69 @@ number of children : {len(n.children)}
         else:
             return None
 
-    def create_figure(self, click_data=None):
+
+
+
+    def create_table(self, highlight_nodes, node_df):
+        df = pd.DataFrame(
+                columns= ['Node 1' , 'Node 2'],
+                index = ['Name']
+            )
+
+        print(df)
+
+        for i, n_id in enumerate(highlight_nodes):
+            if n_id is None or n_id not in node_df.index:
+                continue
+
+            n = node_df.loc[n_id]
+            # don't highlight if the user deselected the node
+            if not n.selected:
+                continue
+            
+            col = f'Node {i+1}'
+            df.loc['Name', col] = n.node.name
+
+        return go.Figure(data=[
+                    go.Table(
+                        header={'values' : [''] + list(df.columns)},
+                        cells={'values' : [df.index] + [df[c].values for c in df.columns]}
+                    )
+                ]
+            )
+
+
+
+    def create_figure(self, click_data, click_mode):
         if click_data is None:
             node = self._tree
         else:
             node = self.get_clicked_node(click_data)
 
         if node is None:
-            return self._fig
+            return self._fig, self._table
+        
+        if click_mode >= 0:
+            self._highlighted_nodes[click_mode] = node.id
 
-        self._highlighted_nodes[0] = node.id
-
+        # DONT TOUCH THESE LINES
         fig = go.Figure()
         self._render_tree.toggle_node(node.id)
         self._node_df = self._render_tree.render()
-        
         self._node_df = self._add_node_pos(self._node_df)
             
         self.add_links(fig, self._node_df)
-        self._highlight_path(fig, node, self._node_df)
+        self._highlight_paths(fig, self._highlighted_nodes, self._node_df)
         self.add_nodes(fig, self._node_df)
 
         fig.update_layout(self.generate_layout(self._node_df))
         self._fig = fig
 
-        return self._fig
+
+        table = self.create_table(self._highlighted_nodes, self._node_df)
+        self._table = table
+
+        return self._fig, self._table
 
 
 
@@ -477,10 +574,27 @@ def create_app(tree):
     app = dash.Dash()
     app.layout = html.Div([
         html.H1('Node link Diagram of tree'),
+        # the table to display data about the nodes
+        # select the different click actions
+        dcc.Graph(
+            id='table',
+            figure=go.Figure()
+        ),
+
+        dcc.RadioItems(
+            options=[
+                {'label' : 'explore', 'value' : -1},
+                {'label' : 'select node 1', 'value' : 0},
+                {'label' : 'select node 2', 'value' : 1}
+            ],
+            value = -1, 
+            labelStyle={'display': 'inline-block'},
+            id='click-mode'
+        ),
 
         dcc.Graph(
             id='tree',
-            figure=tree.create_figure()
+            figure=go.Figure()
         ),
 
         html.Div([
@@ -495,15 +609,17 @@ def create_app(tree):
     
 
     @app.callback(
-            Output('tree', 'figure'),
-            Input('tree', 'clickData'))
-    def display_click_data(click_data):
+            [Output('tree', 'figure'),
+             Output('table', 'figure')],
+            [Input('tree', 'clickData'),
+             Input('click-mode', 'value')])
+    def display_click_data(click_data, click_mode):
         print(f'click_data : {pformat(click_data)}')
         if click_data is None:
-            return tree.create_figure(None)
+            return tree.create_figure(None, click_mode)
         else:
             data = click_data['points'][0]
-            return tree.create_figure(data)
+            return tree.create_figure(data, click_mode)
 
     #@app.callback(
     #        Output('tree', 'figure'),
