@@ -239,7 +239,13 @@ class Tree:
             'height' : max_nodes * 27,
             'width' : max_depth * 500 + 200,
             'showlegend' : False,
-            'plot_bgcolor' : 'white'
+            'plot_bgcolor' : 'white',
+            'xaxis' : {
+                'showticklabels' : False
+            },
+            'yaxis' : {
+                'showticklabels' : False
+            },
 
         }
 
