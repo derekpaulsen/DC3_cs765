@@ -197,7 +197,7 @@ class Tree:
 
         self._link_res = 30
         self._cos_y = np.cos(np.linspace(0, np.pi, self._link_res, endpoint=True))
-        self._x_selected_offset = .5
+
 
         # add root node
         self._render_tree = RenderNode(self._tree, None)
@@ -205,10 +205,13 @@ class Tree:
 
         self._line_colors = [
                 px.colors.qualitative.Safe[0],
-                px.colors.qualitative.Safe[1],
-                px.colors.qualitative.Safe[2],
+                #px.colors.qualitative.Safe[1],
+                #px.colors.qualitative.Safe[2],
                 #px.colors.qualitative.Safe[4],
         ]
+
+        self._x_selected_offset = .5
+        self._y_selected_offset = 1
 
         self._also_line_dash = '2px'
         self._also_line_color = 'grey'
@@ -234,7 +237,7 @@ class Tree:
 
         return {
             'height' : max_nodes * 27,
-            'width' : max_depth * 700,
+            'width' : max_depth * 500 + 200,
             'showlegend' : False,
             'plot_bgcolor' : 'white'
 
@@ -271,26 +274,16 @@ class Tree:
             arc = np.pi / 60
             # 120 degree arc
             p4 = (p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2
-            print('p4 ', p4)
-            print('dist ', dist(p2, p1))
             r = dist(p4, p1) / np.cos(np.pi / 2  - (arc / 2))
-            print('r ',r)
             theta = np.arccos((p1[0] - p2[0]) / dist(p1, p2))
-            print('theta ', theta)
             theta_prime = theta - (np.pi / 2 - (arc / 2))
-            print('theta prime', theta_prime)
             p3 = (np.cos(theta_prime) * r + p1[0]), (np.sin(theta_prime) * r + p1[1])
-            print('p3 ',p3)
 
             start = np.arccos((p2[0] - p3[0]) / r)
             #start = 2 * np.pi / 3
-            print('start ' , start)
             thetas = np.linspace(start, start + arc, num=self._link_res, endpoint=True)
-            print(np.cos(thetas))
             x = np.cos(thetas) * r + p3[0]
             y = np.sin(thetas) * r + p3[1]
-            print('x',x)
-            print('y',y)
 
             line = go.Scatter(
                         x = x,
@@ -403,7 +396,7 @@ number of sub-categories : {len(n.children)}
             df.loc[y.index, 'y'] = y
 
         # adjust down a little more do avoid label collisions
-        df.loc[df.selected, 'y'] -= .5
+        df.loc[df.selected, 'y'] -= self._y_selected_offset
         return df
         
     def _add_node_pos(self, node_df):
@@ -423,7 +416,6 @@ number of sub-categories : {len(n.children)}
         return node_df
 
     def add_nodes(self, fig, node_df):
-        print(node_df)
         fig.update_xaxes(range=(self._x_selected_offset-.05, node_df['x'].max() + .6))
 
         
@@ -493,6 +485,7 @@ number of sub-categories : {len(n.children)}
     def create_table(self, highlight_nodes, node_df):
 
         NAME = 'Name'
+        PATH = 'Path'
         SCAT_PROD_CNT = 'Subcategory Product Count'
         N_SCAT = 'Number of Subcategories'
         PROD_CNT = 'Product Count'
@@ -502,8 +495,9 @@ number of sub-categories : {len(n.children)}
        # N_CX_LISTED = 'Number of Cross Listed Products'
        # PC_CX_LISTED = 'Percent of Products Cross Listed'
         df = pd.DataFrame(
-                columns= ['Node 1' , 'Node 2'],
+                columns= ['', 'Node 1' , 'Node 2'],
                 index = [NAME,
+                        PATH,
                         SCAT_PROD_CNT,
                         N_SCAT,
                         PROD_CNT,
@@ -511,6 +505,7 @@ number of sub-categories : {len(n.children)}
                         N_CX_LISTED_CAT,
                     ]
             )
+        df[''] = df.index
 
 
         for i, n_id in enumerate(highlight_nodes):
@@ -519,45 +514,32 @@ number of sub-categories : {len(n.children)}
 
             n = node_df.loc[n_id]
             
-            col = df.columns[i]
+            col = df.columns[i+1]
             df.loc[NAME, col] = n.node.name
+            df.loc[PATH, col] = u' \u2794 '.join(n.node.path)
             df.loc[SCAT_PROD_CNT, col] = n.node.subtreeProductCount
             df.loc[N_SCAT, col] = len(n.node.children)
             df.loc[PROD_CNT, col] = n.node.productCount
             df.loc[D, col] = n.depth
-            if n.node.productCount > 0:
-                ac = alsoCounts.at[n.node.id] 
-                pre = '' if ac < 200 else '> '
-                df.loc[N_CX_LISTED_CAT, col] = ac
-            else:
-                df.loc[N_CX_LISTED_CAT, col] = '0'
+            df.loc[N_CX_LISTED_CAT, col] = alsoCounts.at[n.node.id] 
 
-
-
-
-        return go.Figure(data=[
-                    go.Table(
-                        header={'values' : [''] + list(df.columns)},
-                        cells={'values' : [df.index] + [df[c].values for c in df.columns]}
-                    )
-                ]
-            )
-
+    
+        cols = [{'id' : c, 'name' : c} for c in df.columns]
+        data = df.to_dict('records')
+        return cols, data
 
 
     def create_figure(self, click_data, click_mode):
         if click_data is None or self._click_mode != click_mode:
             self._click_mode = click_mode
             if self._fig:
-                print('first return')
-                return self._fig, self._table
+                return (self._fig, *self._table)
             node = self._tree
         else:
             node = self.get_clicked_node(click_data)
 
         if node is None:
-            print('node not found')
-            return self._fig, self._table
+            return (self._fig, *self._table)
         
 
         if click_mode >= 0:
@@ -582,11 +564,10 @@ number of sub-categories : {len(n.children)}
         fig.update_layout(self.generate_layout(self._node_df))
         self._fig = fig
 
-        print(self._highlighted_nodes)
         table = self.create_table(self._highlighted_nodes, self._node_df)
         self._table = table
 
-        return self._fig, self._table
+        return (self._fig, *self._table)
 
 
 
@@ -611,20 +592,37 @@ def create_app(tree):
         html.H1('Node link Diagram of tree'),
         # the table to display data about the nodes
         # select the different click actions
-        dcc.Graph(
+        dash_table.DataTable(
             id='table',
-            figure=go.Figure()
-        ),
-
-        dcc.RadioItems(
-            options=[
-                {'label' : 'explore', 'value' : -1},
-                {'label' : 'select node 1', 'value' : 0},
-                {'label' : 'select node 2', 'value' : 1}
+            style_cell = {
+                'whiteSpace' : 'normal',
+                'height'  : 'auto',
+                'textAlign' : 'left',
+            },
+            style_table = {
+                'maxWidth' : '1500px',
+            },
+            columns = [],
+            data = [],
+            style_data_conditional = [
+                {'if': {'column_id': ''}, 'maxWidth': '24px'}
             ],
-            value = -1, 
-            labelStyle={'display': 'inline-block'},
-            id='click-mode'
+
+
+        )
+        ,
+        html.Div(
+            dcc.RadioItems(
+                options=[
+                    {'label' : 'explore', 'value' : -1},
+                    {'label' : 'select node 1', 'value' : 0},
+                    {'label' : 'select node 2', 'value' : 1}
+                ],
+                value = -1, 
+                labelStyle={'display': 'inline-block'},
+                id='click-mode'
+            ),
+            style={'text-align' : 'center'}
         ),
 
         dcc.Graph(
@@ -645,7 +643,8 @@ def create_app(tree):
 
     @app.callback(
             [Output('tree', 'figure'),
-             Output('table', 'figure')],
+             Output('table', 'columns'),
+             Output('table', 'data')],
             [Input('tree', 'clickData'),
              Input('click-mode', 'value')])
     def display_click_data(click_data, click_mode):
