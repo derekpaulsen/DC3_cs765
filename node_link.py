@@ -214,7 +214,7 @@ class Tree:
         self._y_selected_offset = 1
 
         self._also_line_dash = '2px'
-        self._also_line_color = 'grey'
+        self._also_line_color = px.colors.qualitative.Pastel2[7]
         self._also_line_width = .5
 
         self._highlight_line_width = 5
@@ -383,7 +383,7 @@ number of sub-categories : {len(n.children)}
         df['y'] = np.arange(0, -len(df), -1)
         # add gap between the subtrees 
         if len(df) > 1:
-            df['y'] -= np.diff(df.render_order.apply(lambda x : x[-1]), prepend=0).cumsum() * 2
+            df['y'] -= (np.diff(df.parent_id, prepend=df.parent_id.iat[0]) != 0).cumsum() * 2
 
         df = self._adjust_selected_ypos(df)
         return df
@@ -598,36 +598,42 @@ def create_app(tree):
         html.H1('Node link Diagram of tree'),
         # the table to display data about the nodes
         # select the different click actions
-        dash_table.DataTable(
-            id='table',
-            style_cell = {
-                'whiteSpace' : 'normal',
-                'height'  : 'auto',
-                'textAlign' : 'left',
-            },
-            style_table = {
-                'maxWidth' : '1500px',
-            },
-            columns = [],
-            data = [],
-            style_data_conditional = [
-                {'if': {'column_id': ''}, 'maxWidth': '24px'}
+        html.Div([
+                html.H4('Detail View'),
+                dash_table.DataTable(
+                    id='table',
+                    style_cell = {
+                        'whiteSpace' : 'normal',
+                        'height'  : 'auto',
+                        'textAlign' : 'left',
+                    },
+                    style_table = {
+                        'maxWidth' : '1500px',
+                    },
+                    columns = [],
+                    data = [],
+                    style_data_conditional = [
+                        {'if': {'column_id': ''}, 'textAlign': 'right'}
+                    ],
+                )
             ],
+            #style={'text-align' : 'center'}
+        ),
 
 
-        )
-        ,
-        html.Div(
-            dcc.RadioItems(
-                options=[
-                    {'label' : 'explore', 'value' : -1},
-                    {'label' : 'select node 1', 'value' : 0},
-                    {'label' : 'select node 2', 'value' : 1}
-                ],
-                value = -1, 
-                labelStyle={'display': 'inline-block'},
-                id='click-mode'
-            ),
+        html.Div([
+                html.H4('Click Action'),
+                dcc.RadioItems(
+                    options=[
+                        {'label' : 'Expand/Collapse', 'value' : -1},
+                        {'label' : 'Select Node 1', 'value' : 0},
+                        {'label' : 'Select Node 2', 'value' : 1}
+                    ],
+                    value = -1, 
+                    labelStyle={'display': 'inline-block'},
+                    id='click-mode'
+                )
+            ],
             style={'text-align' : 'center'}
         ),
 
@@ -636,14 +642,6 @@ def create_app(tree):
             figure=go.Figure()
         ),
 
-        html.Div([
-            dcc.Markdown("""
-                **Click Data**
-
-                Click on points in the graph.
-            """),
-            html.Pre(id='click-data', style=styles['pre']),
-        ], className='three columns')
     ])
     
 
