@@ -10,6 +10,7 @@ import pandas as pd
 
 import dash
 import dash_core_components as dcc
+import dash_bootstrap_components as dbc
 import dash_html_components as html
 from dash.dependencies import Input, Output
 
@@ -536,28 +537,9 @@ number of sub-categories : {len(n.children)}
         data = df.to_dict('records')
         return cols, data
     
-    def create_bar_chart(self, highlight_nodes, node_df):
 
-        gap = .2
-        layout = go.Layout(
-                xaxis = {'domain' : [0.0, .5 - (gap / 2)], "mirror" : "allticks", 'side': 'top'},
-               xaxis2 = {'domain' : [.5 + (gap / 2), 1.0], "mirror" : "allticks", 'side': 'top'},
-               yaxis2 = {
-                   'overlaying' : 'y',
-                   'anchor' : 'free',
-                   'position' : .5 + (gap / 2)
-               }
-        )   
-        
-        dfs = []
-        traces = []
-        xmax = 0
-        bar_count = 0
-        for i, n_id in enumerate(highlight_nodes):
-            if n_id is None or n_id not in node_df.index:
-                dfs.append(None)
-                continue
 
+    def create_bar_df(self, n_id, node_df):
             n = node_df.loc[n_id]
             bar_df = pd.DataFrame({
                 'count' : list(n.node.also.values())
@@ -567,22 +549,19 @@ number of sub-categories : {len(n.children)}
             bar_df['path'] = CSV_DATA['pathName'].loc[bar_df.index].apply(ast.literal_eval)
             bar_df['name'] = CSV_DATA['name'].loc[bar_df.index]
             bar_df['label'] = bar_df['name'] + ' : ' + np.array(list(map(str, bar_df.index)))
+            bar_df['id'] = bar_df.index
+            bar_df = bar_df.set_index('label')
             
 
             bar_df['percent'] = bar_df['count'] / n.node.productCount if n.node.productCount > 0.0  else 0.0
 
-            dfs.append(bar_df)
+            return bar_df
 
-
-        for i, bar_df in enumerate(dfs):
-            if bar_df is None:
-                continue
-
-            bar_df = bar_df.sort_values('count', ascending=True)
-
-            bar = go.Bar(
-                    name = f'Node {i+1}',
-                    y = bar_df['label'],
+    def create_bar_fig(self, bar_df, name):
+        data = [
+            go.Bar(
+                    name = name,
+                    y = bar_df.index,
                     x = bar_df['percent'],
                     text = bar_df['percent'].apply(lambda x : f'{x:.3f}'),
                     textposition='outside',
@@ -592,38 +571,95 @@ number of sub-categories : {len(n.children)}
                     #width=20
 
             )
-            if i > 0:
-                bar.xaxis = f'x{i+1}'
-                bar.yaxis = f'y{i+1}'
-            
-            xmax = max(xmax, bar_df['percent'].max())
-            bar_count = max(bar_count, len(bar_df))
+        ]
 
-            traces.append(bar)
 
-        layout.height = max(500, bar_count * 25)
 
-        fig = go.Figure(
-                data = traces,
-                layout = layout,
-        )
+        layout = go.Layout(
+                xaxis = {"mirror" : "allticks", 'side': 'top'},
+        )   
+        return go.Figure(
+                data = data,
+                layout=layout
+            )
 
-        fig.update_xaxes(range=(0.0, xmax + .05), mirror=True)
-        fig.update_yaxes(mirror=True)
+    def create_stacked_bar_fig(self, bar_dfs):
+        suffixes = ['1', '2']
+        joined = bar_dfs[0].join(bar_dfs[1],
+                                    how='inner',
+                                    lsuffix=suffixes[0],
+                                    rsuffix=suffixes[1]
+                            )
 
-        return fig
+        if len(joined) == 0:
+            return go.Figure()
+
+        joined['sort_key'] = joined[['l_percent', 'r_percent']].max(axis=1)
+        joined.sort_values('sort_key')
+        data = []
+        for i, suffix in enumerate(suffixes):
+            bar = go.Bar(
+                    name = f'Node {i+1}',
+                    y = joined.index,
+                    x = joined[f'percent{suffix}'],
+                    text = joined[f'percent{suffix}'].apply(lambda x : f'{x:.3f}'),
+                    textposition='outside',
+                    hovertext=joined[f'path{suffix}'].apply(' \u2794 '.join),
+                    hoverinfo='x+text',
+                    orientation = 'h',
+                    #width=20
+
+            )
+
+            data.append(bar)
+
+
+        layout = go.Layout(
+                xaxis = {"mirror" : "allticks", 'side': 'top'},
+                barmode='stack'
+        )   
+        return go.Figure(
+                data = data,
+                layout=layout
+            )
+
+
+    def create_bar_charts(self, highlight_nodes, node_df):
+        
+        dfs = []
+        for i, n_id in enumerate(highlight_nodes):
+            if n_id is None or n_id not in node_df.index:
+                dfs.append(None)
+            else:
+                dfs.append(self.create_bar_df(n_id, node_df))
+
+
+        figs = [
+                self.create_bar_fig(dfs[0], 'Node 1') if dfs[0] is not None else go.Figure(),
+                self.create_stacked_bar_fig(dfs) if all(d is not None for d in dfs) else go.Figure(),
+                self.create_bar_fig(dfs[1], 'Node 2') if dfs[1] is not None else go.Figure(),
+        ]
+        xmax = 0.0
+        for df in dfs:
+            if df is not None:
+                xmax = max(xmax, df['percent'].max())
+        
+        for f in figs:
+            f.update_xaxes(range=(0, xmax + 0.05))
+
+        return figs
 
     def create_figure(self, click_data, click_mode):
         if click_data is None or self._click_mode != click_mode:
             self._click_mode = click_mode
             if self._fig:
-                return (self._fig, *self._table, self._bar_chart)
+                return (self._fig, *self._table, *self._bar_charts)
             node = self._tree
         else:
             node = self.get_clicked_node(click_data)
 
         if node is None:
-            return (self._fig, *self._table, self._bar_chart)
+            return (self._fig, *self._table, *self._bar_charts)
         
 
         if click_mode >= 0:
@@ -650,9 +686,9 @@ number of sub-categories : {len(n.children)}
         # create basic table
         self._table = self.create_table(self._highlighted_nodes, self._node_df)
         # create bar chart
-        self._bar_chart = self.create_bar_chart(self._highlighted_nodes, self._node_df)
+        self._bar_charts = self.create_bar_charts(self._highlighted_nodes, self._node_df)
 
-        return (self._fig, *self._table, self._bar_chart)
+        return (self._fig, *self._table, *self._bar_charts)
 
 
 
@@ -672,19 +708,38 @@ def create_app(tree):
 
     logger.info('creating app')
 
-    app = dash.Dash()
+    app = dash.Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])
     app.layout = html.Div([
         html.H1('Node link Diagram of tree'),
-        html.Div(
-            dcc.Graph(
-                id='bar-chart',
-                figure=go.Figure(),
+        html.Div([
+            html.Div([
+                dcc.Graph(
+                    id='bar-chart-0',
+                    figure=go.Figure(),
+                ),],
+                className="four columns"
             ),
-            style={
-                'max-height' : '500px',
-                'overflow-y' : 'scroll',
-                'position' : 'relative',
-            }
+            html.Div([
+                dcc.Graph(
+                    id='bar-chart-1',
+                    figure=go.Figure(),
+                ),],
+                className="four columns"
+            ),
+            html.Div([
+                dcc.Graph(
+                    id='bar-chart-2',
+                    figure=go.Figure(),
+                ),],
+                className="four columns"
+            ),
+            ],
+            #style={
+            #    'max-height' : '500px',
+            #    'overflow-y' : 'scroll',
+            #    'position' : 'relative',
+            #},
+            className='row'
         ),
         # the table to display data about the nodes
         # select the different click actions
@@ -733,13 +788,16 @@ def create_app(tree):
         ),
 
     ])
-    
+
 
     @app.callback(
             [Output('tree', 'figure'),
              Output('table', 'columns'),
              Output('table', 'data'),
-             Output('bar-chart', 'figure')],
+             Output('bar-chart-0', 'figure'),
+             Output('bar-chart-1', 'figure'),
+             Output('bar-chart-2', 'figure'),
+             ],
             [Input('tree', 'clickData'),
              Input('click-mode', 'value')])
     def display_click_data(click_data, click_mode):
