@@ -540,8 +540,8 @@ number of sub-categories : {len(n.children)}
 
         gap = .2
         layout = go.Layout(
-                xaxis = {'domain' : [0.0, .5 - (gap / 2)]},
-               xaxis2 = {'domain' : [.5 + (gap / 2), 1.0]},
+                xaxis = {'domain' : [0.0, .5 - (gap / 2)], "mirror" : "allticks", 'side': 'top'},
+               xaxis2 = {'domain' : [.5 + (gap / 2), 1.0], "mirror" : "allticks", 'side': 'top'},
                yaxis2 = {
                    'overlaying' : 'y',
                    'anchor' : 'free',
@@ -549,12 +549,13 @@ number of sub-categories : {len(n.children)}
                }
         )   
         
+        dfs = []
         traces = []
         xmax = 0
         bar_count = 0
         for i, n_id in enumerate(highlight_nodes):
             if n_id is None or n_id not in node_df.index:
-                traces.append(go.Bar())
+                dfs.append(None)
                 continue
 
             n = node_df.loc[n_id]
@@ -569,8 +570,15 @@ number of sub-categories : {len(n.children)}
             
 
             bar_df['percent'] = bar_df['count'] / n.node.productCount if n.node.productCount > 0.0  else 0.0
-            bar_df = bar_df.sort_values('count', ascending=False)
-            bar_df = bar_df.head(20)
+
+            dfs.append(bar_df)
+
+
+        for i, bar_df in enumerate(dfs):
+            if bar_df is None:
+                continue
+
+            bar_df = bar_df.sort_values('count', ascending=True)
 
             bar = go.Bar(
                     name = f'Node {i+1}',
@@ -581,6 +589,7 @@ number of sub-categories : {len(n.children)}
                     hovertext=bar_df['path'].apply(' \u2794 '.join),
                     hoverinfo='x+text',
                     orientation = 'h',
+                    #width=20
 
             )
             if i > 0:
@@ -592,7 +601,7 @@ number of sub-categories : {len(n.children)}
 
             traces.append(bar)
 
-        layout.height = max(500, bar_count * 10)
+        layout.height = max(500, bar_count * 25)
 
         fig = go.Figure(
                 data = traces,
