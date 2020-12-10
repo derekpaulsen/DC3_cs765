@@ -499,7 +499,9 @@ number of sub-categories : {len(n.children)}
         N_SCAT = 'Number of Subcategories'
         PROD_CNT = 'Product Count'
         D = 'Depth'
-        N_CX_LISTED_CAT = 'Number of Cross Listed Categories'
+        N_CX_LISTED_CAT = 'Number of Categories with Shared Products'
+        N_SHARED_PRODS = 'Number of Shared Products'
+        P_SHARED_PRODS = 'Percent of Products Shared'
         # cannot get this info
        # N_CX_LISTED = 'Number of Cross Listed Products'
        # PC_CX_LISTED = 'Percent of Products Cross Listed'
@@ -512,9 +514,10 @@ number of sub-categories : {len(n.children)}
                         PROD_CNT,
                         D,
                         N_CX_LISTED_CAT,
+                        N_SHARED_PRODS,
+                        P_SHARED_PRODS
                     ]
             )
-        df[''] = df.index
 
 
         for i, n_id in enumerate(highlight_nodes):
@@ -531,6 +534,16 @@ number of sub-categories : {len(n.children)}
             df.loc[PROD_CNT, col] = n.node.productCount
             df.loc[D, col] = n.depth
             df.loc[N_CX_LISTED_CAT, col] = CSV_DATA.at[n.node.id, 'alsoCount'] 
+        
+        if all([i in node_df.index for i in highlight_nodes]):
+            n0 = node_df.loc[highlight_nodes[0]]
+            olap = n0.node.also[highlight_nodes[1]]
+            df.loc[N_SHARED_PRODS] = olap
+            df.loc[P_SHARED_PRODS] = df.loc[N_SHARED_PRODS] / df.loc[PROD_CNT]
+
+
+        df[''] = df.index
+
 
     
         cols = [{'id' : c, 'name' : c} for c in df.columns]
@@ -557,34 +570,42 @@ number of sub-categories : {len(n.children)}
 
             return bar_df
 
-    def create_bar_fig(self, bar_df, name):
-        data = [
-            go.Bar(
-                    name = name,
-                    y = bar_df.index,
-                    x = bar_df['percent'],
-                    text = bar_df['percent'].apply(lambda x : f'{x:.3f}'),
-                    textposition='outside',
-                    hovertext=bar_df['path'].apply(' \u2794 '.join),
-                    hoverinfo='x+text',
-                    orientation = 'h',
-                    #width=20
+    def create_bar_fig(self, bar_df, name, color):
+        bar_df = bar_df.sort_values('percent')
+        bar = go.Bar(
+                name = name,
+                y = bar_df.index,
+                x = bar_df['percent'],
+                text = bar_df['percent'].apply(lambda x : f'{x:.3f}'),
+                textposition='outside',
+                hovertext=bar_df.apply(self.create_bar_chart_hover, axis=1),
+                hoverinfo='x+text',
+                orientation = 'h',
+                marker_color = color
+                #width=20
 
-            )
-        ]
-
-
+        )
 
         layout = go.Layout(
-                xaxis = {"mirror" : "allticks", 'side': 'top'},
+                title = {'text' : name},
+                xaxis = {"mirror" : "allticks", 'side': 'top', 'title' : {'text' : f'Percent of {name} Products Shared'}},
+                height = max(10, len(bar_df) * 25),
         )   
         return go.Figure(
-                data = data,
+                data = [bar],
                 layout=layout
             )
+    
+    def create_bar_chart_hover(self, row):
+        p = ' \u2794 '.join(row.path)
+        return f'''
+Path : {p}<br>
+Number of Products Shared : {row.count}
+'''
 
-    def create_stacked_bar_fig(self, bar_dfs):
-        suffixes = ['1', '2']
+
+    def create_grouped_bar_fig(self, bar_dfs, colors):
+        suffixes = ['', '2']
         joined = bar_dfs[0].join(bar_dfs[1],
                                     how='inner',
                                     lsuffix=suffixes[0],
@@ -594,8 +615,8 @@ number of sub-categories : {len(n.children)}
         if len(joined) == 0:
             return go.Figure()
 
-        joined['sort_key'] = joined[['l_percent', 'r_percent']].max(axis=1)
-        joined.sort_values('sort_key')
+        joined['sort_key'] = joined[['percent' + s for s in suffixes]].max(axis=1)
+        joined = joined.sort_values('sort_key')
         data = []
         for i, suffix in enumerate(suffixes):
             bar = go.Bar(
@@ -604,9 +625,10 @@ number of sub-categories : {len(n.children)}
                     x = joined[f'percent{suffix}'],
                     text = joined[f'percent{suffix}'].apply(lambda x : f'{x:.3f}'),
                     textposition='outside',
-                    hovertext=joined[f'path{suffix}'].apply(' \u2794 '.join),
+                    hovertext=joined.apply(self.create_bar_chart_hover, axis=1),
                     hoverinfo='x+text',
                     orientation = 'h',
+                    marker_color = colors[i]
                     #width=20
 
             )
@@ -615,8 +637,10 @@ number of sub-categories : {len(n.children)}
 
 
         layout = go.Layout(
-                xaxis = {"mirror" : "allticks", 'side': 'top'},
-                barmode='stack'
+                title = {'text' : 'Overlap'},
+                xaxis = {"mirror" : "allticks", 'side': 'top', 'title' : {'text' : 'Percent of Products Shared'}},
+                height = max(10, len(joined) * 50),
+                barmode='group'
         )   
         return go.Figure(
                 data = data,
@@ -633,21 +657,30 @@ number of sub-categories : {len(n.children)}
             else:
                 dfs.append(self.create_bar_df(n_id, node_df))
 
+        bar_colors = [
+                px.colors.qualitative.Safe[0],
+                px.colors.qualitative.Safe[1],
+        ]
 
         figs = [
-                self.create_bar_fig(dfs[0], 'Node 1') if dfs[0] is not None else go.Figure(),
-                self.create_stacked_bar_fig(dfs) if all(d is not None for d in dfs) else go.Figure(),
-                self.create_bar_fig(dfs[1], 'Node 2') if dfs[1] is not None else go.Figure(),
+                self.create_bar_fig(dfs[0], 'Node 1', bar_colors[0]) if dfs[0] is not None else go.Figure(),
+                self.create_grouped_bar_fig(dfs, bar_colors) if all(d is not None for d in dfs) else go.Figure(),
+                self.create_bar_fig(dfs[1], 'Node 2', bar_colors[1]) if dfs[1] is not None else go.Figure(),
         ]
         xmax = 0.0
+        max_bars = 0
         for df in dfs:
             if df is not None:
                 xmax = max(xmax, df['percent'].max())
+                max_bars = max(max_bars, len(df))
         
+
         for f in figs:
-            f.update_xaxes(range=(0, xmax + 0.05))
+            f.update_xaxes(range=(0, xmax * 1.15))
+            #f.update_layout(height=max(500, max_bars*25))
 
         return figs
+
 
     def create_figure(self, click_data, click_mode):
         if click_data is None or self._click_mode != click_mode:
@@ -712,11 +745,11 @@ def create_app(tree):
     app.layout = html.Div([
         html.H1('Node link Diagram of tree'),
         html.Div([
-            html.Div([
+            html.Div(
                 dcc.Graph(
                     id='bar-chart-0',
                     figure=go.Figure(),
-                ),],
+                ),
                 className="four columns"
             ),
             html.Div([
@@ -734,11 +767,11 @@ def create_app(tree):
                 className="four columns"
             ),
             ],
-            #style={
-            #    'max-height' : '500px',
-            #    'overflow-y' : 'scroll',
-            #    'position' : 'relative',
-            #},
+            style={
+                'max-height' : '500px',
+                'overflow-y' : 'scroll',
+                'position' : 'relative',
+            },
             className='row'
         ),
         # the table to display data about the nodes
