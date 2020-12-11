@@ -122,12 +122,13 @@ class RenderNode:
             if c.id == id:
                 self.remove_child(c)
                 return True
-
+        
         # add node if node is not selected and child
-        for c in self._node.children.values():
-            if c.id == id:
-                self.add_child(c)
-                return True
+        if self._node.children:
+            for c in self._node.children.values():
+                if c.id == id:
+                    self.add_child(c)
+                    return True
 
         # continue search existing selected nodes
         for c in self._schildren:
