@@ -449,20 +449,21 @@ number of sub-categories : {len(n.children) if n.children else 0}
         #scatter.marker.symbol = 'circle-open'
         #scatter.marker.sizemode = 'area'
         scatter.marker.size = 18
+        scatter.marker.line.width = 2
+        scatter.marker.line.color = 'DarkSlateGrey'
         # color options
         scatter.marker.colorscale = 'Greens'
         scatter.marker.cmin = 0.0
         scatter.marker.cmax = 1.0
         
-        colors = node_df['sub_product_count'].values.astype(np.float64)
+        colors = node_df['node'].apply(lambda x : len(x.children) if x.children else 0)
         # limit colors 
-        colors = np.clip(colors, 1, 100000)
-        colors = np.log(colors)
+        colors = np.clip(colors, 0, 50)
         colors /= colors.max()
         scatter.marker.color = colors
 
         scatter.hovertext = node_df.apply(self._make_hover_text, axis=1)
-        scatter.hoverinfo = 'text+x+y'
+        scatter.hoverinfo = 'text'
         #scatter.hoverlabel = node_df['product_count'].apply(str)
 
 
