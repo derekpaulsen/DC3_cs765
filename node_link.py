@@ -886,7 +886,7 @@ logger.info('reading tree')
 tree = read_tree()
 
 app = create_app(tree)
-
+server = app.server
 if __name__ == '__main__':
     logger.info('starting server')
     app.run_server(debug=True)  # Turn off reloader if inside Jupyter
