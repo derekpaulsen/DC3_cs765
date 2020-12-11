@@ -153,7 +153,8 @@ class RenderNode:
         render_order = [0]
         self._render(points, 0, render_order)
 
-        df = pd.DataFrame(points.values(), columns=self.node_point_keys)
+        df = pd.DataFrame(points.values(), columns=self.node_point_keys)\
+                .convert_dtypes()
 
         return df.set_index('id')
 
@@ -258,7 +259,7 @@ class Tree:
             if p2[1] > p1[1]:
                 y = np.flip(y)
 
-            x = np.linspace(p1[0], p2[0], len(y))
+            x = np.linspace(p1[0], p2[0], len(y), dtype=np.float32)
 
             line = go.Scatter(
                         x = x,
@@ -290,7 +291,7 @@ class Tree:
 
             start = np.arccos((p2[0] - p3[0]) / r)
             #start = 2 * np.pi / 3
-            thetas = np.linspace(start, start + arc, num=self._link_res, endpoint=True)
+            thetas = np.linspace(start, start + arc, num=self._link_res, endpoint=True, dtype=np.float32)
             x = np.cos(thetas) * r + p3[0]
             y = np.sin(thetas) * r + p3[1]
 
