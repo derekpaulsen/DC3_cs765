@@ -381,9 +381,11 @@ product count : {n.productCount}<br>
 number of sub-categories : {len(n.children)}
 '''
 
-    def _assign_node_y_pos(self, df):
+    def _assign_node_y_pos(self, df, node_df):
         df = df.sort_values(['render_order', 'label'])
+        avg_parent_y = node_df['y'].loc[df['parent_id'].unique()].mean()
         df['y'] = np.arange(0, -len(df), -1)
+        df['y'] += avg_parent_y - df['y'].iat[len(df) // 2]
         # add gap between the subtrees 
         if len(df) > 1:
             df['y'] -= (np.diff(df.parent_id, prepend=df.parent_id.iat[0]) != 0).cumsum() * 2
@@ -407,21 +409,22 @@ number of sub-categories : {len(n.children)}
         # adjust down a little more do avoid label collisions
         df.loc[df.selected, 'y'] -= self._y_selected_offset
         return df
+
         
     def _add_node_pos(self, node_df):
+        node_df['prev_y'] = np.nan
         node_df['x'] = node_df['depth']
         # offset the selected nodes
         node_df.loc[node_df['selected'], 'x'] += self._x_selected_offset
-
-        node_df = node_df.reset_index()\
-                         .groupby('depth')\
-                            .apply(self._assign_node_y_pos)\
-                        .reset_index(drop=True)\
-                        .set_index('id')
+        # assign root node 
+        node_df.at[0, 'y'] = 0.0
+        # for all other levels
+        for d in node_df['depth'].unique()[1:]:
+            s = node_df.loc[node_df.depth.eq(d)]
+            node_df.loc[s.index] = self._assign_node_y_pos(s, node_df)
 
 
         node_df['sub_product_count'] = node_df['node'].apply(lambda x: x.subtreeProductCount)
-        node_df.at[0, 'y'] = node_df['y'].loc[node_df.depth == 1].median()
         return node_df
 
     def add_nodes(self, fig, node_df):
@@ -452,7 +455,7 @@ number of sub-categories : {len(n.children)}
         scatter.marker.color = colors
 
         scatter.hovertext = node_df.apply(self._make_hover_text, axis=1)
-        scatter.hoverinfo = 'text'
+        scatter.hoverinfo = 'text+x+y'
         #scatter.hoverlabel = node_df['product_count'].apply(str)
 
 
@@ -744,6 +747,29 @@ def create_app(tree):
     app = dash.Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])
     app.layout = html.Div([
         html.H1('Node link Diagram of tree'),
+        # the table to display data about the nodes
+        # select the different click actions
+        html.Div([
+                html.H4('Detail View'),
+                dash_table.DataTable(
+                    id='table',
+                    style_cell = {
+                        'whiteSpace' : 'normal',
+                        'height'  : 'auto',
+                        'textAlign' : 'left',
+                    },
+                    style_table = {
+                        'maxWidth' : '1500px',
+                    },
+                    columns = [],
+                    data = [],
+                    style_data_conditional = [
+                        {'if': {'column_id': ''}, 'textAlign': 'right'}
+                    ],
+                )
+            ],
+            #style={'text-align' : 'center'}
+        ),
         html.Div([
             html.Div(
                 dcc.Graph(
@@ -774,29 +800,6 @@ def create_app(tree):
             },
             className='row'
         ),
-        # the table to display data about the nodes
-        # select the different click actions
-        html.Div([
-                html.H4('Detail View'),
-                dash_table.DataTable(
-                    id='table',
-                    style_cell = {
-                        'whiteSpace' : 'normal',
-                        'height'  : 'auto',
-                        'textAlign' : 'left',
-                    },
-                    style_table = {
-                        'maxWidth' : '1500px',
-                    },
-                    columns = [],
-                    data = [],
-                    style_data_conditional = [
-                        {'if': {'column_id': ''}, 'textAlign': 'right'}
-                    ],
-                )
-            ],
-            #style={'text-align' : 'center'}
-        ),
 
 
         html.Div([
@@ -814,11 +817,18 @@ def create_app(tree):
             ],
             style={'text-align' : 'center'}
         ),
-
-        dcc.Graph(
-            id='tree',
-            figure=go.Figure()
-        ),
+        html.Div(
+            dcc.Graph(
+                id='tree',
+                figure=go.Figure()
+            ),
+            style={
+                'max-height' : '1500px',
+                'overflow-y' : 'scroll',
+                'position' : 'relative',
+            },
+            className='row'
+        )
 
     ])
 
