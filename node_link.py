@@ -34,13 +34,14 @@ styles = {
     }
 }
 
-CSV_DATA = pd.read_csv('all-nodes.csv')\
+CSV_DATA = pd.read_csv('all-nodes.csv')[['pathName', 'name', 'alsoCount', 'id']]\
                 .set_index('id')
 
 
 
 def dist(p1,p2):
     return np.sqrt((p1[0] - p2[0])**2 +  (p1[1] - p2[1])**2)
+
 depth = 0
 
 # extract all the node labels
@@ -195,10 +196,9 @@ class Tree:
 
     def __init__(self, tree):
         self._tree = tree
-        self._pos_to_node_id = [0]
 
         self._link_res = 30
-        self._cos_y = np.cos(np.linspace(0, np.pi, self._link_res, endpoint=True))
+        self._cos_y = np.cos(np.linspace(0, np.pi, self._link_res, endpoint=True, dtype=np.float32))
 
 
         # add root node
