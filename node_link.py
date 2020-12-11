@@ -6,7 +6,7 @@ import ast
 from pprint import pformat
 import numpy as np
 import pandas as pd
-from convert_tree import CompactNode
+from convert_tree import convert
 import traceback
 
 import dash
@@ -736,8 +736,8 @@ Number of Products Shared : {row.count}
 
 
 def read_tree():
-    with open('compact_tree.pickle', 'rb') as ifs:
-        tree = pickle.load(ifs)
+    with open('tree-all.pickle', 'rb') as ifs:
+        tree = convert(pickle.load(ifs))
 
     return Tree(tree)
 
