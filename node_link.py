@@ -50,19 +50,8 @@ def dist(p1,p2):
 
 depth = 0
 
-# extract all the node labels
-def get_nodes(node, labels):
-    labels[node.id] = node
-    for c in node.children.values():
-        get_nodes(c, labels)
 
 
-def add_links(node, source, target, value):
-    for c in node.children.values():
-        source.append(node.id)
-        target.append(c.id)
-        #value.append(c.subtreeProductCount)
-        value.append(1)
 
 
 class RenderNode:
@@ -542,7 +531,7 @@ number of sub-categories : {len(n.children) if n.children else 0}
             df.loc[NAME, col] = n.node.name
             df.loc[PATH, col] = u' \u2794 '.join(n.node.path)
             df.loc[SCAT_PROD_CNT, col] = n.node.subtreeProductCount
-            df.loc[N_SCAT, col] = len(n.node.children)
+            df.loc[N_SCAT, col] = len(n.node.children) if n.node.children else 0
             df.loc[PROD_CNT, col] = n.node.productCount
             df.loc[D, col] = n.depth
             df.loc[N_CX_LISTED_CAT, col] = CSV_DATA.at[n.node.id, 'alsoCount'] 
