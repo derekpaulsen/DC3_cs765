@@ -582,7 +582,7 @@ number of sub-categories : {len(n.children) if n.children else 0}
                 text = bar_df['percent'].apply(lambda x : f'{x:.3f}'),
                 textposition='outside',
                 hovertext=bar_df.apply(self.create_bar_chart_hover, axis=1),
-                hoverinfo='x+text',
+                hoverinfo='text',
                 orientation = 'h',
                 marker_color = color,
                 #width=20
@@ -601,12 +601,12 @@ number of sub-categories : {len(n.children) if n.children else 0}
             )
     
     def create_bar_chart_hover(self, row):
-        p = ' \u2794 '.join(row.path)
-        print(p)
-        return f'''
-Path : {p}<br>
-Number of Products Shared : {row.count}
+        path = ' \u2794 '.join(row.path)
+        s= f'''
+Path : {path}<br>
+Number of Products Shared : {row["count"]}
 '''
+        return s
 
 
     def create_grouped_bar_fig(self, bar_dfs, colors):
@@ -630,7 +630,7 @@ Number of Products Shared : {row.count}
                     x = joined[f'percent{suffix}'],
                     text = joined[f'percent{suffix}'].apply(lambda x : f'{x:.3f}'),
                     textposition='outside',
-                    hovertext=joined.apply(self.create_bar_chart_hover, axis=1),
+                    hovertext=joined.path.apply(' \u2794 '.join),
                     hoverinfo='x+text',
                     orientation = 'h',
                     marker_color = colors[i]
