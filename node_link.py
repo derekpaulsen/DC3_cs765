@@ -6,6 +6,7 @@ import ast
 from pprint import pformat
 import numpy as np
 import pandas as pd
+from convert_tree import CompactNode
 
 import dash
 import dash_core_components as dcc
@@ -173,22 +174,23 @@ class RenderNode:
                     selected=True,
                     render_order=tuple(render_order[:depth])
             )
-        for c in self._node.children.values():
-            points[c.id] = (self.make_node_point(
-                    label=c.name,
-                    id=c.id,
-                    depth=depth+1,
-                    parent_id=self.id,
-                    parent_label=self.name,
-                    node=c,
-                    render_order=tuple(render_order)
-            ))
+        if self._node.children:
+            for c in self._node.children.values():
+                points[c.id] = (self.make_node_point(
+                        label=c.name,
+                        id=c.id,
+                        depth=depth+1,
+                        parent_id=self.id,
+                        parent_label=self.name,
+                        node=c,
+                        render_order=tuple(render_order)
+                ))
 
         render_order = render_order + [0]
         for c in self._schildren:
             c._render(points, depth+1, render_order)
-
-            if len(c._node.children) > 0:
+            # node has children
+            if c._node.children:
                 render_order[-1] += 1
         
 
@@ -382,7 +384,7 @@ class Tree:
         return f'''
 {n.name}<br>
 product count : {n.productCount}<br>
-number of sub-categories : {len(n.children)}
+number of sub-categories : {len(n.children) if n.children else 0}
 '''
 
     def _assign_node_y_pos(self, df, node_df):
@@ -733,7 +735,7 @@ Number of Products Shared : {row.count}
 
 
 def read_tree():
-    with open('tree-all.pickle', 'rb') as ifs:
+    with open('compact_tree.pickle', 'rb') as ifs:
         tree = pickle.load(ifs)
 
     return Tree(tree)
