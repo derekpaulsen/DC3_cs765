@@ -210,7 +210,7 @@ class Tree:
         ]
 
         self._x_selected_offset = .5
-        self._y_selected_offset = 1
+        self._y_selected_offset = .6
 
         self._also_line_dash = '2px'
         self._also_line_color = px.colors.qualitative.Pastel2[7]
