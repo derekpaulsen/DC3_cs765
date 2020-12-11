@@ -7,6 +7,7 @@ from pprint import pformat
 import numpy as np
 import pandas as pd
 from convert_tree import CompactNode
+import traceback
 
 import dash
 import dash_core_components as dcc
@@ -861,7 +862,10 @@ def create_app(tree):
 
 
 logger.info('reading tree')
-tree = read_tree()
+try:
+    tree = read_tree()
+except:
+    traceback.print_exc()
 
 app = create_app(tree)
 server = app.server
