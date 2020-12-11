@@ -1,2 +1,2 @@
 main:
-	python3 ./node_link.py
+	python3 ./node_link.py --debug

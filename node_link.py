@@ -4,7 +4,6 @@ import plotly.express as px
 import pickle
 import ast
 from pprint import pformat
-import json
 import numpy as np
 import pandas as pd
 
@@ -14,11 +13,16 @@ import dash_bootstrap_components as dbc
 import dash_html_components as html
 from dash.dependencies import Input, Output
 
-from copy import deepcopy
+import sys
+from argparse import ArgumentParser
 
 import logging
 import logging.config
-import sys
+
+
+argp = ArgumentParser()
+argp.add_argument('--debug', action='store_true')
+
 
 LOGGING_CONF = './conf/logging.conf'
 
@@ -728,11 +732,6 @@ Number of Products Shared : {row.count}
 
 
 
-
-
-
-
-
 def read_tree():
     with open('tree-all.pickle', 'rb') as ifs:
         tree = pickle.load(ifs)
@@ -851,28 +850,6 @@ def create_app(tree):
             data = click_data['points'][0]
             return tree.create_figure(data, click_mode)
 
-    #@app.callback(
-    #        Output('tree', 'figure'),
-    #        [Input('tree', 'clickData'),
-    #        Input('tree', 'hoverData')])
-    #def display_click_data(click_data, hover_data):
-    #    print(f'click_data : {pformat(click_data)}')
-    #    print(f'hover_data : {pformat(hover_data)}')
-    #    if click_data is None and hover_data is None:
-    #        return tree.create_figure(None)
-
-    #    elif click_data is not None:
-    #        data = click_data['points'][0]
-    #        return tree.create_figure(data)
-
-    #    elif hover_data is not None:
-    #        data = hover_data['points'][0]
-    #        if 'pointNumber' in data:
-    #            return tree.highlight_fig(data)
-    #        else:
-    #            return tree._fig
-
-
 
 
 
@@ -887,8 +864,9 @@ tree = read_tree()
 app = create_app(tree)
 server = app.server
 if __name__ == '__main__':
+    args = argp.parse_args(sys.argv[1:])
     logger.info('starting server')
-    app.run_server(debug=True)  # Turn off reloader if inside Jupyter
+    app.run_server(debug=args.debug)  # Turn off reloader if inside Jupyter
 
 
 
