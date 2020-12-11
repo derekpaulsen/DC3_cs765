@@ -540,7 +540,9 @@ number of sub-categories : {len(n.children) if n.children else 0}
             n0 = node_df.loc[highlight_nodes[0]]
             olap = n0.node.also[highlight_nodes[1]]
             df.loc[N_SHARED_PRODS] = olap
-            df.loc[P_SHARED_PRODS] = df.loc[N_SHARED_PRODS] / df.loc[PROD_CNT]
+            mask = df.loc[PROD_CNT] > 0
+            df.loc[P_SHARED_PRODS, mask] = df.loc[N_SHARED_PRODS, mask] / df.loc[PROD_CNT, mask] 
+            df.loc[P_SHARED_PRODS, ~mask] = 0.0
 
 
         df[''] = df.index
@@ -582,7 +584,7 @@ number of sub-categories : {len(n.children) if n.children else 0}
                 hovertext=bar_df.apply(self.create_bar_chart_hover, axis=1),
                 hoverinfo='x+text',
                 orientation = 'h',
-                marker_color = color
+                marker_color = color,
                 #width=20
 
         )
@@ -590,7 +592,8 @@ number of sub-categories : {len(n.children) if n.children else 0}
         layout = go.Layout(
                 title = {'text' : name},
                 xaxis = {"mirror" : "allticks", 'side': 'top', 'title' : {'text' : f'Percent of {name} Products Shared'}},
-                height = max(10, len(bar_df) * 25),
+                #yaxis = {'automargin' : True},
+                height = max(500, len(bar_df) * 30),
         )   
         return go.Figure(
                 data = [bar],
@@ -599,6 +602,7 @@ number of sub-categories : {len(n.children) if n.children else 0}
     
     def create_bar_chart_hover(self, row):
         p = ' \u2794 '.join(row.path)
+        print(p)
         return f'''
 Path : {p}<br>
 Number of Products Shared : {row.count}
@@ -640,7 +644,7 @@ Number of Products Shared : {row.count}
         layout = go.Layout(
                 title = {'text' : 'Overlap'},
                 xaxis = {"mirror" : "allticks", 'side': 'top', 'title' : {'text' : 'Percent of Products Shared'}},
-                height = max(10, len(joined) * 50),
+                height = max(500, len(joined) * 50),
                 barmode='group'
         )   
         return go.Figure(
