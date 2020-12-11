@@ -153,8 +153,7 @@ class RenderNode:
         render_order = [0]
         self._render(points, 0, render_order)
 
-        df = pd.DataFrame(points.values(), columns=self.node_point_keys)\
-                .convert_dtypes()
+        df = pd.DataFrame(points.values(), columns=self.node_point_keys)
 
         return df.set_index('id')
 
