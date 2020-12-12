@@ -436,7 +436,7 @@ number of sub-categories : {len(n.children) if n.children else 0}
                 textposition = node_df['selected'].apply(lambda x : 'top center' if x else 'middle right')
             )
 
-        #scatter.marker.symbol = 'circle-open'
+        #scatter.marker.symbol = 'triangle-right'
         #scatter.marker.sizemode = 'area'
         scatter.marker.size = 18
         scatter.marker.line.width = 2
@@ -501,8 +501,8 @@ number of sub-categories : {len(n.children) if n.children else 0}
         PROD_CNT = 'Product Count'
         D = 'Depth'
         N_CX_LISTED_CAT = 'Number of Categories with Shared Products'
-        N_SHARED_PRODS = 'Number of Shared Products'
-        P_SHARED_PRODS = 'Percent of Products Shared'
+        N_SHARED_PRODS = 'Number of Shared Products between Nodes'
+        P_SHARED_PRODS = 'Percent of Products Shared between Nodes'
         # cannot get this info
        # N_CX_LISTED = 'Number of Cross Listed Products'
        # PC_CX_LISTED = 'Percent of Products Cross Listed'
@@ -510,10 +510,10 @@ number of sub-categories : {len(n.children) if n.children else 0}
                 columns= ['', 'Node 1' , 'Node 2'],
                 index = [NAME,
                         PATH,
-                        SCAT_PROD_CNT,
-                        N_SCAT,
-                        PROD_CNT,
                         D,
+                        PROD_CNT,
+                        N_SCAT,
+                        SCAT_PROD_CNT,
                         N_CX_LISTED_CAT,
                         N_SHARED_PRODS,
                         P_SHARED_PRODS
@@ -742,6 +742,8 @@ def create_app(tree):
     logger.info('creating app')
 
     app = dash.Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])
+
+    col_width = '500px'
     app.layout = html.Div([
         html.H1('Node link Diagram of tree'),
         # the table to display data about the nodes
@@ -754,6 +756,7 @@ def create_app(tree):
                         'whiteSpace' : 'normal',
                         'height'  : 'auto',
                         'textAlign' : 'left',
+                        'minWidth': col_width, 'width': col_width, 'maxWidth': col_width,
                     },
                     style_table = {
                         'maxWidth' : '1500px',
@@ -817,11 +820,17 @@ def create_app(tree):
         html.Div(
             dcc.Graph(
                 id='tree',
-                figure=go.Figure()
+                figure=go.Figure(),
+                config = {
+                    'frameMargins' : .001,
+                    'responisive' : True
+                }
             ),
             style={
                 'max-height' : '1500px',
+                'max-width' : '2400px',
                 'overflow-y' : 'scroll',
+                'overflow-x' : 'scroll',
                 'position' : 'relative',
             },
             className='row'
