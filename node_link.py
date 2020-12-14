@@ -592,7 +592,7 @@ number of sub-categories : {len(n.children) if n.children else 0}
         layout = go.Layout(
                 title = {'text' : name},
                 xaxis = {"mirror" : "allticks", 'side': 'top', 'title' : {'text' : f'Percent of {name} Products Shared'}},
-                #yaxis = {'automargin' : True},
+                yaxis = {'automargin' : True},
                 height = max(500, len(bar_df) * 30),
         )   
         return go.Figure(
@@ -775,6 +775,9 @@ def create_app(tree):
                 dcc.Graph(
                     id='bar-chart-0',
                     figure=go.Figure(),
+            config = {
+                'responisive' : True
+            }
                 ),
                 className="four columns"
             ),
@@ -782,6 +785,9 @@ def create_app(tree):
                 dcc.Graph(
                     id='bar-chart-1',
                     figure=go.Figure(),
+                    config = {
+                        'responisive' : True
+                    }
                 ),],
                 className="four columns"
             ),
@@ -789,6 +795,9 @@ def create_app(tree):
                 dcc.Graph(
                     id='bar-chart-2',
                     figure=go.Figure(),
+                    config = {
+                        'responisive' : True
+                    }
                 ),],
                 className="four columns"
             ),
