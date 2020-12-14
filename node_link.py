@@ -501,13 +501,13 @@ number of sub-categories : {len(n.children) if n.children else 0}
         PROD_CNT = 'Product Count'
         D = 'Depth'
         N_CX_LISTED_CAT = 'Number of Categories with Shared Products'
-        N_SHARED_PRODS = 'Number of Shared Products between Nodes'
-        P_SHARED_PRODS = 'Percent of Products Shared between Nodes'
+        N_SHARED_PRODS = 'Number of Shared Products between Categories'
+        P_SHARED_PRODS = 'Percent of Products Shared between Categories'
         # cannot get this info
        # N_CX_LISTED = 'Number of Cross Listed Products'
        # PC_CX_LISTED = 'Percent of Products Cross Listed'
         df = pd.DataFrame(
-                columns= ['', 'Node 1' , 'Node 2'],
+                columns= ['', 'Category 1' , 'Category 2'],
                 index = [NAME,
                         PATH,
                         D,
@@ -625,7 +625,7 @@ Number of Products Shared : {row["count"]}
         data = []
         for i, suffix in enumerate(suffixes):
             bar = go.Bar(
-                    name = f'Node {i+1}',
+                    name = f'Category {i+1}',
                     y = joined.index,
                     x = joined[f'percent{suffix}'],
                     text = joined[f'percent{suffix}'].apply(lambda x : f'{x:.3f}'),
@@ -668,9 +668,9 @@ Number of Products Shared : {row["count"]}
         ]
 
         figs = [
-                self.create_bar_fig(dfs[0], 'Node 1', bar_colors[0]) if dfs[0] is not None else go.Figure(),
+                self.create_bar_fig(dfs[0], 'Category 1', bar_colors[0]) if dfs[0] is not None else go.Figure(),
                 self.create_grouped_bar_fig(dfs, bar_colors) if all(d is not None for d in dfs) else go.Figure(),
-                self.create_bar_fig(dfs[1], 'Node 2', bar_colors[1]) if dfs[1] is not None else go.Figure(),
+                self.create_bar_fig(dfs[1], 'Category 2', bar_colors[1]) if dfs[1] is not None else go.Figure(),
         ]
         xmax = 0.0
         max_bars = 0
@@ -807,8 +807,8 @@ def create_app(tree):
                 dcc.RadioItems(
                     options=[
                         {'label' : 'Expand/Collapse', 'value' : -1},
-                        {'label' : 'Select Node 1', 'value' : 0},
-                        {'label' : 'Select Node 2', 'value' : 1}
+                        {'label' : 'Select Category 1', 'value' : 0},
+                        {'label' : 'Select Category 2', 'value' : 1}
                     ],
                     value = -1, 
                     labelStyle={'display': 'inline-block'},
