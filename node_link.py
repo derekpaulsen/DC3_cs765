@@ -745,7 +745,7 @@ def create_app(tree):
 
     col_width = '500px'
     app.layout = html.Div([
-        html.H1('Node link Diagram of tree'),
+        html.H1('Node Link Diagram of Amazon Product Data'),
         # the table to display data about the nodes
         # select the different click actions
         html.Div([
