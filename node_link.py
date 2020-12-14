@@ -592,7 +592,7 @@ number of sub-categories : {len(n.children) if n.children else 0}
         layout = go.Layout(
                 title = {'text' : name},
                 xaxis = {"mirror" : "allticks", 'side': 'top', 'title' : {'text' : f'Percent of {name} Products Shared'}},
-                yaxis = {'automargin' : True},
+                #yaxis = {'automargin' : True},
                 height = max(500, len(bar_df) * 30),
         )   
         return go.Figure(
@@ -624,13 +624,17 @@ Number of Products Shared : {row["count"]}
         joined = joined.sort_values('sort_key')
         data = []
         for i, suffix in enumerate(suffixes):
+            # hack to fix bar hover
+            if i == 1:
+                joined['count'] = joined['count2']
+
             bar = go.Bar(
                     name = f'Category {i+1}',
                     y = joined.index,
                     x = joined[f'percent{suffix}'],
                     text = joined[f'percent{suffix}'].apply(lambda x : f'{x:.3f}'),
                     textposition='outside',
-                    hovertext=joined.path.apply(' \u2794 '.join),
+                    hovertext=joined.apply(self.create_bar_chart_hover, axis=1),
                     hoverinfo='x+text',
                     orientation = 'h',
                     marker_color = colors[i]
@@ -682,7 +686,7 @@ Number of Products Shared : {row["count"]}
 
         for f in figs:
             f.update_xaxes(range=(0, xmax * 1.15))
-            #f.update_layout(height=max(500, max_bars*25))
+            #f.update_layout(width=550)
 
         return figs
 
@@ -775,9 +779,6 @@ def create_app(tree):
                 dcc.Graph(
                     id='bar-chart-0',
                     figure=go.Figure(),
-            config = {
-                'responisive' : True
-            }
                 ),
                 className="four columns"
             ),
@@ -785,9 +786,6 @@ def create_app(tree):
                 dcc.Graph(
                     id='bar-chart-1',
                     figure=go.Figure(),
-                    config = {
-                        'responisive' : True
-                    }
                 ),],
                 className="four columns"
             ),
@@ -795,9 +793,6 @@ def create_app(tree):
                 dcc.Graph(
                     id='bar-chart-2',
                     figure=go.Figure(),
-                    config = {
-                        'responisive' : True
-                    }
                 ),],
                 className="four columns"
             ),
